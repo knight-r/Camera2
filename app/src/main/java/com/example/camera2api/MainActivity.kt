@@ -144,12 +144,12 @@ open class MainActivity : AppCompatActivity() {
         mainBinding.btnStartStop.setOnClickListener {
             if (mIsRecordingVideo ) {
                 mainBinding.btnStartStop.setImageResource(R.drawable.ic_video_icon)
-                mIsRecordingVideo = false
+
                 mChronometer!!.base = SystemClock.elapsedRealtime();
                 mChronometer!!.stop();
                 mChronometer!!.visibility = View.GONE
                 stopRecordingVideo()
-                createCameraPreview()
+
                 val mediaStoreUpdateIntent = Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE)
                 mediaStoreUpdateIntent.data = Uri.fromFile(File(mVideoFileName))
                 sendBroadcast(mediaStoreUpdateIntent)
@@ -235,7 +235,7 @@ open class MainActivity : AppCompatActivity() {
                      rotatedHeight = width
                 }
                 mPreviewSize = chooseOptimalSize(map!!.getOutputSizes(SurfaceTexture::class.java), rotatedWidth, rotatedHeight)
-                mVideoSize = chooseOptimalSize(map!!.getOutputSizes(MediaRecorder::class.java), rotatedWidth, rotatedHeight)
+                mVideoSize = chooseOptimalSize(map.getOutputSizes(MediaRecorder::class.java), rotatedWidth, rotatedHeight)
                 mImageSize = chooseOptimalSize(map.getOutputSizes(ImageFormat.JPEG), rotatedWidth, rotatedHeight)
                 mImageReader = ImageReader.newInstance(mImageSize.width, mImageSize.height, ImageFormat.JPEG, 1)
                 mImageReader!!.setOnImageAvailableListener(mOnImageAvailableListener, mBackgroundHandler)
@@ -248,10 +248,12 @@ open class MainActivity : AppCompatActivity() {
         if (!mIsRecordingVideo) {
             return
         }
+        mIsRecordingVideo = false
         mMediaRecorder.stop()
         mMediaRecorder.reset()
         createCameraPreview()
         closeCamera()
+
 
     }
 
