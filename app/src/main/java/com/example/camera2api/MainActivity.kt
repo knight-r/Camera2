@@ -6,7 +6,6 @@ import android.content.pm.PackageManager
 import android.graphics.ImageFormat
 import android.graphics.SurfaceTexture
 import android.hardware.camera2.*
-import android.media.CamcorderProfile
 import android.media.Image
 import android.media.ImageReader
 import android.media.MediaRecorder
@@ -19,7 +18,6 @@ import android.view.Surface
 import android.view.TextureView
 import android.view.TextureView.SurfaceTextureListener
 import android.view.View
-import android.view.View.OnLongClickListener
 import android.widget.Chronometer
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
@@ -34,7 +32,6 @@ import java.util.*
 
 open class MainActivity : AppCompatActivity() {
 
-    private val TAG = "MainActivity"
     private var textureView: TextureView? = null
     private val ORIENTATIONS = SparseIntArray()
 
@@ -58,12 +55,39 @@ open class MainActivity : AppCompatActivity() {
     private lateinit var mImageFolder: File
     private lateinit var mVideoFolder: File
     private lateinit var mVideoFileName: String
+    private lateinit var mScreenSize:Size
     private var mChronometer: Chronometer? = null
     private var mTotalRotation: Int = 0
     private var mIsTimeLapse: Boolean   = false
+    private var   isCameraSwitched:Boolean = false
+    private var isVideoPaused: Boolean = false
+
+
+    private var width:Int = 0
+    private var height:Int = 0
+    private var textureListener: SurfaceTextureListener = object : SurfaceTextureListener {
+        override fun onSurfaceTextureAvailable(surface: SurfaceTexture, w: Int, h: Int) {
+            //open your camera here
+            width = w
+            height = h
+            setupCamera(w, h)
+            openCamera()
+        }
+
+        override fun onSurfaceTextureSizeChanged(surface: SurfaceTexture, width: Int, height: Int) {
+            // Transform you image captured size according to the surface width and height
+        }
+
+        override fun onSurfaceTextureDestroyed(surface: SurfaceTexture): Boolean {
+            return false
+        }
+
+        override fun onSurfaceTextureUpdated(surface: SurfaceTexture) {}
+    }
 
     private val stateCallback: CameraDevice.StateCallback = object : CameraDevice.StateCallback() {
         override fun onOpened(camera: CameraDevice) {
+
             //This is called when the camera is open
             Log.e(TAG, "onOpened")
             mCameraDevice = camera
@@ -95,32 +119,13 @@ open class MainActivity : AppCompatActivity() {
         }
     }
 
-    private var textureListener: SurfaceTextureListener = object : SurfaceTextureListener {
-        override fun onSurfaceTextureAvailable(surface: SurfaceTexture, width: Int, height: Int) {
-            //open your camera here
-            setupCamera(width, height)
-            openCamera()
-        }
-
-        override fun onSurfaceTextureSizeChanged(surface: SurfaceTexture, width: Int, height: Int) {
-            // Transform you image captured size according to the surface width and height
-        }
-
-        override fun onSurfaceTextureDestroyed(surface: SurfaceTexture): Boolean {
-            return false
-        }
-
-        override fun onSurfaceTextureUpdated(surface: SurfaceTexture) {}
-    }
-
-
     private val mOnImageAvailableListener =
         ImageReader.OnImageAvailableListener { reader ->
             mBackgroundHandler!!.post(ImageSaver(reader.acquireLatestImage(), mImageFileName))
 
         }
 
-    private var isVideoPaused: Boolean = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         mainBinding = ActivityMainBinding.inflate(layoutInflater)
@@ -130,24 +135,22 @@ open class MainActivity : AppCompatActivity() {
         textureView!!.surfaceTextureListener = textureListener
 
         mChronometer = mainBinding.chronometer
+        mChronometer!!.visibility = View.GONE
 
         ORIENTATIONS.append(Surface.ROTATION_0, 90)
         ORIENTATIONS.append(Surface.ROTATION_90, 0)
         ORIENTATIONS.append(Surface.ROTATION_180, 270)
         ORIENTATIONS.append(Surface.ROTATION_270, 180)
+        checkPermissions()
         createVideoFolder()
         createImageFolder()
         mainBinding.chronometer.visibility = View.GONE
-        mainBinding.btnTakePicture.setOnClickListener {
+        mainBinding.ivTakePicture.setOnClickListener {
             takePicture()
         }
-        mainBinding.btnStartStop.setOnClickListener {
+        mainBinding.ivStartStop.setOnClickListener {
             if (mIsRecordingVideo ) {
-                mainBinding.btnStartStop.setImageResource(R.drawable.ic_video_icon)
 
-                mChronometer!!.base = SystemClock.elapsedRealtime();
-                mChronometer!!.stop();
-                mChronometer!!.visibility = View.GONE
                 stopRecordingVideo()
 
                 val mediaStoreUpdateIntent = Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE)
@@ -155,22 +158,34 @@ open class MainActivity : AppCompatActivity() {
                 sendBroadcast(mediaStoreUpdateIntent)
                 Toast.makeText(this, "Video saved to file explorer", Toast.LENGTH_SHORT).show()
             } else {
-                mIsRecordingVideo = true
-                mainBinding.btnStartStop.setImageResource(R.drawable.ic_stop_icon)
-                checkPermissions()
+
+                startRecordingVideo()
+
+            }
+        }
+        mainBinding.ivSwitchCamera.setOnClickListener {
+            isCameraSwitched = true
+            closeCamera()
+            if(mIsRecordingVideo) {
+                stopRecordingVideo()
+                startRecordingVideo()
+
+            } else {
+                setupCamera(width,height)
+                openCamera()
             }
         }
         var timeWhenPaused: Long = 0
-        mainBinding.btnPauseResume.setOnClickListener {
+        mainBinding.ivPauseResume.setOnClickListener {
             if (isVideoPaused) {
                 isVideoPaused = false
-                mainBinding.btnPauseResume.setImageResource(R.drawable.ic_pause_icon)
+                mainBinding.ivPauseResume.setImageResource(R.drawable.ic_pause_icon)
                 mChronometer!!.base = SystemClock.elapsedRealtime() + timeWhenPaused
                 mChronometer!!.start()
                 mMediaRecorder.resume()
             } else {
                 isVideoPaused = true
-                mainBinding.btnPauseResume.setImageResource(R.drawable.ic_resume_icon)
+                mainBinding.ivPauseResume.setImageResource(R.drawable.ic_resume_icon)
                 timeWhenPaused = mChronometer!!.base - SystemClock.elapsedRealtime()
                 mChronometer!!.stop()
                 mMediaRecorder.pause()
@@ -193,9 +208,6 @@ open class MainActivity : AppCompatActivity() {
                 mImage.close()
                 val mediaStoreUpdateIntent = Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE)
                 mediaStoreUpdateIntent.data = Uri.fromFile(File(imageFileName))
-                /**
-                 *  TODO : sendBroadcast(mediaStoreUpdateIntent) // not working for image
-                 */
                 if (fileOutputStream != null) {
                     try {
                         fileOutputStream.close()
@@ -245,45 +257,18 @@ open class MainActivity : AppCompatActivity() {
         }
      }
     private fun stopRecordingVideo() {
-        if (!mIsRecordingVideo) {
-            return
+        mChronometer!!.stop();
+        mChronometer!!.base = SystemClock.elapsedRealtime();
+        mChronometer!!.visibility = View.GONE
+        if(!mIsRecordingVideo) {
+             return
         }
         mIsRecordingVideo = false
         mMediaRecorder.stop()
         mMediaRecorder.reset()
-        createCameraPreview()
         closeCamera()
-
-
-    }
-
-    /**
-     * check permissions to access camera hardware
-     */
-    private  fun checkPermissions() {
-        if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.CAMERA)
-                == PackageManager.PERMISSION_GRANTED && ContextCompat.checkSelfPermission(this, android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
-                == PackageManager.PERMISSION_GRANTED && ContextCompat.checkSelfPermission(this, android.Manifest.permission.RECORD_AUDIO)
-                == PackageManager.PERMISSION_GRANTED
-                    ) {
-
-                    createVideoFileName()
-                    startRecordingVideo()
-                    mMediaRecorder.start()
-                    mChronometer!!.base = SystemClock.elapsedRealtime()
-                    mChronometer!!.visibility = View.VISIBLE
-                    mChronometer!!.start();
-
-            } else {
-                if (shouldShowRequestPermissionRationale(android.Manifest.permission.WRITE_EXTERNAL_STORAGE )) {
-                    Toast.makeText(this, "app needs permission to be able to save videos", Toast.LENGTH_SHORT)
-                        .show()
-                }
-                requestPermissions(
-                    arrayOf(android.Manifest.permission.CAMERA, android.Manifest.permission.WRITE_EXTERNAL_STORAGE, android.Manifest.permission.RECORD_AUDIO),
-                    REQUEST_CAMERA_PERMISSION
-                )
-            }
+        setupCamera(width,height)
+        openCamera()
 
     }
 
@@ -328,8 +313,14 @@ open class MainActivity : AppCompatActivity() {
 
     private fun startRecordingVideo() {
         try {
+            mIsRecordingVideo = true
+            createVideoFileName()
+            mChronometer!!.visibility = View.VISIBLE
 
+            mChronometer!!.base = SystemClock.elapsedRealtime()
+            mChronometer!!.start();
             setUpMediaRecorder()
+            mMediaRecorder.start()
 
             val surfaceTexture: SurfaceTexture? = mainBinding.textureView.surfaceTexture
             surfaceTexture!!.setDefaultBufferSize(mPreviewSize.width, mPreviewSize.height)
@@ -376,10 +367,10 @@ open class MainActivity : AppCompatActivity() {
                 setOutputFile(mVideoFileName)
                 setVideoEncodingBitRate(3000000)
                 setVideoFrameRate(30)
-                setVideoSize(640, 480)
+                setVideoSize(640,480)
                 setVideoEncoder(MediaRecorder.VideoEncoder.H264)
                 setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
-                setOrientationHint(mTotalRotation);
+                setOrientationHint(0);
                 prepare()
             }
         } catch (e: IOException) {
@@ -387,65 +378,7 @@ open class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun sensorToDeviceRotation(
-        cameraCharacteristics: CameraCharacteristics,
-        deviceOrientation: Int,
-    ): Int {
-        var deviceOrientation = deviceOrientation
-        val sensorOrientation = cameraCharacteristics.get(CameraCharacteristics.SENSOR_ORIENTATION)!!
-        deviceOrientation = ORIENTATIONS[deviceOrientation]
-        return (sensorOrientation + deviceOrientation + 360) % 360
-    }
 
-    private fun createVideoFolder() {
-        val movieFile = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES)
-        mVideoFolder = File(movieFile, "camera2VideoImage")
-        if (!mVideoFolder.exists()) {
-            mVideoFolder.mkdirs()
-        }
-    }
-
-    private  fun createImageFolder() {
-        val imageFile =
-            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)
-        mImageFolder = File(imageFile, "camera2VideoImage")
-        if (!mImageFolder.exists()) {
-            mImageFolder.mkdirs()
-        }
-    }
-
-    private  fun createImageFileName(): File? {
-        val timestamp: String = SimpleDateFormat("yyyyMMdd_HHmmss").format(Date())
-        val prepend = "IMAGE_" + timestamp + "_"
-        val imageFile = File.createTempFile(prepend, ".jpg", mImageFolder)
-        mImageFileName = imageFile.absolutePath
-        return imageFile
-    }
-
-    private  fun createVideoFileName(): File? {
-        val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss").format(Date())
-        val prepend = "VIDEO_" + timestamp + "_"
-        val videoFile = File.createTempFile(prepend, ".mp4", mVideoFolder)
-        mVideoFileName = videoFile.absolutePath
-        return videoFile
-    }
-
-    private fun startBackgroundThread() {
-        mBackgroundThreadHandler = HandlerThread("Camera Background")
-        mBackgroundThreadHandler!!.start()
-        mBackgroundHandler = Handler(mBackgroundThreadHandler!!.looper)
-    }
-
-    private fun stopBackgroundThread() {
-        mBackgroundThreadHandler!!.quitSafely()
-        try {
-            mBackgroundThreadHandler!!.join()
-            mBackgroundThreadHandler = null
-            mBackgroundHandler = null
-        } catch (e: InterruptedException) {
-            e.printStackTrace()
-        }
-    }
 
     private fun takePicture() {
         if (mCameraDevice == null) {
@@ -552,7 +485,7 @@ open class MainActivity : AppCompatActivity() {
     private fun createCameraPreview() {
         try {
             val texture = textureView!!.surfaceTexture!!
-            texture.setDefaultBufferSize(mImageDimension!!.getWidth(), mImageDimension!!.getHeight())
+            texture.setDefaultBufferSize(mImageDimension!!.width, mImageDimension!!.height)
             val surface = Surface(texture)
             mCaptureRequestBuilder =
                 mCameraDevice!!.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW)
@@ -589,7 +522,17 @@ open class MainActivity : AppCompatActivity() {
         val manager = getSystemService(Context.CAMERA_SERVICE) as CameraManager
         Log.e(TAG, "is camera open")
         try {
-            mCameraId = manager.cameraIdList[0]
+            mCameraId = if(isCameraSwitched) {
+                if (mCameraId  ==  manager.cameraIdList[0]) {
+                    manager.cameraIdList[1]
+                } else {
+                    manager.cameraIdList[0]
+                }
+
+            } else {
+                manager.cameraIdList[0]
+            }
+            isCameraSwitched = false
             val characteristics = manager.getCameraCharacteristics(mCameraId.toString())
             val map = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)!!
             mImageDimension = map.getOutputSizes(SurfaceTexture::class.java)[0]
@@ -621,7 +564,8 @@ open class MainActivity : AppCompatActivity() {
 
     private fun updatePreview() {
         if (null == mCameraDevice) {
-            Log.e(TAG, "updatePreview error, return")
+            Log.e(TAG, "updatePreview error")
+            return
         }
         mCaptureRequestBuilder!!.set(CaptureRequest.CONTROL_MODE, CameraMetadata.CONTROL_MODE_AUTO)
         try {
@@ -646,6 +590,28 @@ open class MainActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * check permissions to access camera hardware
+     */
+    private  fun checkPermissions() {
+        if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.CAMERA)
+            == PackageManager.PERMISSION_GRANTED && ContextCompat.checkSelfPermission(this, android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
+            == PackageManager.PERMISSION_GRANTED && ContextCompat.checkSelfPermission(this, android.Manifest.permission.RECORD_AUDIO)
+            == PackageManager.PERMISSION_GRANTED
+        ) {
+            Toast.makeText(this, "All permissions granted", Toast.LENGTH_SHORT).show()
+        } else {
+            if (shouldShowRequestPermissionRationale(android.Manifest.permission.WRITE_EXTERNAL_STORAGE )) {
+                Toast.makeText(this, "app needs permission to be able to save videos", Toast.LENGTH_SHORT)
+                    .show()
+            }
+            requestPermissions(
+                arrayOf(android.Manifest.permission.CAMERA, android.Manifest.permission.WRITE_EXTERNAL_STORAGE, android.Manifest.permission.RECORD_AUDIO),
+                REQUEST_CAMERA_PERMISSION
+            )
+        }
+
+    }
     override fun onRequestPermissionsResult(
         requestCode: Int,
         permissions: Array<String?>,
@@ -664,6 +630,65 @@ open class MainActivity : AppCompatActivity() {
             }
         }
     }
+    private fun sensorToDeviceRotation(
+        cameraCharacteristics: CameraCharacteristics,
+        deviceOrientation: Int,
+    ): Int {
+        var deviceOrientation = deviceOrientation
+        val sensorOrientation = cameraCharacteristics.get(CameraCharacteristics.SENSOR_ORIENTATION)!!
+        deviceOrientation = ORIENTATIONS[deviceOrientation]
+        return (sensorOrientation + deviceOrientation + 360) % 360
+    }
+
+    private fun createVideoFolder() {
+        val movieFile = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES)
+        mVideoFolder = File(movieFile, "camera2VideoImage")
+        if (!mVideoFolder.exists()) {
+            mVideoFolder.mkdirs()
+        }
+    }
+
+    private  fun createImageFolder() {
+        val imageFile =
+            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)
+        mImageFolder = File(imageFile, "camera2VideoImage")
+        if (!mImageFolder.exists()) {
+            mImageFolder.mkdirs()
+        }
+    }
+
+    private  fun createImageFileName(): File? {
+        val timestamp: String = SimpleDateFormat("yyyyMMdd_HHmmss").format(Date())
+        val prepend = "IMAGE_" + timestamp + "_"
+        val imageFile = File.createTempFile(prepend, ".jpg", mImageFolder)
+        mImageFileName = imageFile.absolutePath
+        return imageFile
+    }
+
+    private  fun createVideoFileName(): File? {
+        val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss").format(Date())
+        val prepend = "VIDEO_" + timestamp + "_"
+        val videoFile = File.createTempFile(prepend, ".mp4", mVideoFolder)
+        mVideoFileName = videoFile.absolutePath
+        return videoFile
+    }
+
+    private fun startBackgroundThread() {
+        mBackgroundThreadHandler = HandlerThread("Camera Background")
+        mBackgroundThreadHandler!!.start()
+        mBackgroundHandler = Handler(mBackgroundThreadHandler!!.looper)
+    }
+
+    private fun stopBackgroundThread() {
+        mBackgroundThreadHandler!!.quitSafely()
+        try {
+            mBackgroundThreadHandler!!.join()
+            mBackgroundThreadHandler = null
+            mBackgroundHandler = null
+        } catch (e: InterruptedException) {
+            e.printStackTrace()
+        }
+    }
 
     override fun onResume() {
         super.onResume()
@@ -678,9 +703,15 @@ open class MainActivity : AppCompatActivity() {
 
     override fun onPause() {
         Log.e(TAG, "onPause")
-        //closeCamera();
+        closeCamera()
         stopBackgroundThread()
         super.onPause()
+    }
+
+    companion object {
+        const val CAMERA_FRONT = "1"
+        const val CAMERA_BACK = "0"
+        const val TAG = "Camera2"
     }
 
 }
