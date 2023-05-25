@@ -77,15 +77,16 @@ open class MainActivity : AppCompatActivity() {
     private var isVideoPaused: Boolean = false
     private lateinit var progressDialogue: ProgressDialog
     private var mVideoFileList = mutableListOf<String>()
-    private var isFrontCamera: Boolean = false
     private var width:Int = 0
     private var height:Int = 0
+    private var mIsOddNumberVideo = true
     private var textureListener: SurfaceTextureListener = object : SurfaceTextureListener {
         override fun onSurfaceTextureAvailable(surface: SurfaceTexture, w: Int, h: Int) {
             width = w
             height = h
-            setupCamera(w, h)
+            setupCamera(w,h)
             openCamera()
+
         }
 
         override fun onSurfaceTextureSizeChanged(surface: SurfaceTexture, width: Int, height: Int) {
@@ -137,17 +138,20 @@ open class MainActivity : AppCompatActivity() {
 
         mTextureView!!.surfaceTextureListener = textureListener
 
-        ORIENTATIONS.append(Surface.ROTATION_0, 0)
-        ORIENTATIONS.append(Surface.ROTATION_90, 90)
-        ORIENTATIONS.append(Surface.ROTATION_180, 180)
-        ORIENTATIONS.append(Surface.ROTATION_270, 270)
+        mCameraId = ID_CAMERA_BACK
+        ORIENTATIONS.append(Surface.ROTATION_0, 90)
+        ORIENTATIONS.append(Surface.ROTATION_90, 0)
+        ORIENTATIONS.append(Surface.ROTATION_180, 270)
+        ORIENTATIONS.append(Surface.ROTATION_270, 180)
         checkPermissions()
         createVideoFolder()
         createImageFolder()
+
         mainBinding.chronometer.visibility = View.GONE
         mainBinding.ivTakePicture.setOnClickListener {
             takePicture()
         }
+
         mainBinding.ivStartStop.setOnClickListener {
             if (mIsRecordingVideo ) {
                 mIsRecordingVideo = false
@@ -159,16 +163,21 @@ open class MainActivity : AppCompatActivity() {
             } else {
                 mIsRecordingVideo = true
                 closeCamera()
-                setupCamera(width,height)
+                setupCamera(width , height)
                 openCamera()
                 startRecordingVideo()
 
             }
         }
 
+
         mainBinding.ivSwitchCamera.setOnClickListener {
             isCameraSwitched = true
-            isFrontCamera = !isFrontCamera
+            mCameraId = if(mCameraId == ID_CAMERA_FRONT){
+                ID_CAMERA_BACK
+            } else {
+                ID_CAMERA_FRONT
+            }
             if(mIsRecordingVideo) {
                 stopRecordingVideo()
                 closeCamera()
@@ -249,6 +258,7 @@ open class MainActivity : AppCompatActivity() {
                      rotatedWidth = height
                      rotatedHeight = width
                 }
+
                 mPreviewSize = chooseOptimalSize(map!!.getOutputSizes(SurfaceTexture::class.java), rotatedWidth, rotatedHeight)
                 mVideoSize = chooseOptimalSize(map.getOutputSizes(MediaRecorder::class.java), rotatedWidth, rotatedHeight)
                 mImageSize = chooseOptimalSize(map.getOutputSizes(ImageFormat.JPEG), rotatedWidth, rotatedHeight)
@@ -437,6 +447,7 @@ open class MainActivity : AppCompatActivity() {
         }
     }
     private fun stopRecordingVideo() {
+        mIsOddNumberVideo = true
         mChronometer!!.stop()
         mChronometer!!.base = SystemClock.elapsedRealtime();
         mChronometer!!.visibility = View.GONE
@@ -446,15 +457,11 @@ open class MainActivity : AppCompatActivity() {
         sendBroadcast(mediaStoreUpdateIntent)
         Toast.makeText(this, "Video saved to file explorer", Toast.LENGTH_SHORT).show()
         mVideoFileList.add(mVideoFileName)
-         Toast.makeText(this, "Video saved to file explorer", Toast.LENGTH_SHORT).show()
         if (!mIsRecordingVideo) {
             val prepend = "Merged_VIDEO"
             val outputFile = File.createTempFile(prepend, ".mp4", mVideoFolder)
-//            var videoFiles = mutableListOf<String>()
-//            videoFiles.add(mVideoFileList[1])
-//            videoFiles.add(mVideoFileList[2])
-
-            mergeVideosUsingMp4Parser(mVideoFileList, outputFile)
+           // mergeVideosUsingMp4Parser(mVideoFileList, outputFile)
+            mergeVideosUsingTranscoder(mVideoFileList,outputFile)
             mVideoFileList = mutableListOf<String>()
         }
 
@@ -473,11 +480,12 @@ open class MainActivity : AppCompatActivity() {
                 setVideoSize(640,480)
                 setVideoEncoder(MediaRecorder.VideoEncoder.H264)
                 setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
-                if(isFrontCamera) {
+                if(mCameraId == ID_CAMERA_FRONT) {
                     setOrientationHint(270)
                 } else {
                     setOrientationHint(90)
                 }
+
                 prepare()
             }
         } catch (e: IOException) {
@@ -629,15 +637,7 @@ open class MainActivity : AppCompatActivity() {
         val manager = getSystemService(Context.CAMERA_SERVICE) as CameraManager
         Log.e(TAG, "is camera open")
         try {
-            mCameraId = if(isCameraSwitched) {
-                if(mCameraId == manager.cameraIdList[0]) {
-                    manager.cameraIdList[1]
-                } else {
-                    manager.cameraIdList[0]
-                }
-            } else {
-                manager.cameraIdList[0]
-            }
+
             isCameraSwitched = false
             val characteristics = manager.getCameraCharacteristics(mCameraId.toString())
             val map = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)!!
@@ -706,7 +706,7 @@ open class MainActivity : AppCompatActivity() {
             == PackageManager.PERMISSION_GRANTED && ContextCompat.checkSelfPermission(this, android.Manifest.permission.RECORD_AUDIO)
             == PackageManager.PERMISSION_GRANTED
         ) {
-            Toast.makeText(this, "All permissions granted", Toast.LENGTH_SHORT).show()
+           // Toast.makeText(this, "All permissions granted", Toast.LENGTH_SHORT).show()
         } else {
             if (shouldShowRequestPermissionRationale(android.Manifest.permission.WRITE_EXTERNAL_STORAGE )) {
                 Toast.makeText(this, "app needs permission to be able to save videos", Toast.LENGTH_SHORT)
@@ -804,7 +804,7 @@ open class MainActivity : AppCompatActivity() {
         if (mTextureView!!.isAvailable) {
             openCamera()
         } else {
-            Toast.makeText(this, "TextureView not available", Toast.LENGTH_SHORT).show()
+//            Toast.makeText(this, "TextureView not available", Toast.LENGTH_SHORT).show()
             mTextureView!!.surfaceTextureListener = textureListener
         }
 
@@ -818,8 +818,8 @@ open class MainActivity : AppCompatActivity() {
     }
 
     companion object {
-        const val CAMERA_FRONT = "1"
-        const val CAMERA_BACK = "0"
+        const val ID_CAMERA_FRONT = "1"
+        const val ID_CAMERA_BACK = "0"
         const val TAG = "Camera2"
     }
 
