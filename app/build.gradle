@@ -57,4 +57,13 @@ dependencies {
     implementation 'androidx.camera:camera-lifecycle:1.2.2'
     // Camera2 View
     implementation 'androidx.camera:camera-view:1.2.2'
+
+    // MP4-parser
+    implementation 'org.mp4parser:isoparser:1.9.41'
+    implementation 'org.mp4parser:muxer:1.9.41'
+    implementation 'org.bytedeco:javacv:1.5.6'
+
+   // Transcoder
+    implementation 'com.otaliastudios:transcoder:0.10.5'
+
 }
