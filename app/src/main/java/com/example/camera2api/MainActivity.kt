@@ -7,7 +7,6 @@ import android.content.pm.PackageManager
 import android.graphics.ImageFormat
 import android.graphics.SurfaceTexture
 import android.hardware.camera2.*
-import android.media.Image
 import android.media.ImageReader
 import android.media.MediaRecorder
 import android.net.Uri
@@ -38,7 +37,6 @@ import org.mp4parser.muxer.builder.DefaultMp4Builder
 import org.mp4parser.muxer.container.mp4.MovieCreator
 import org.mp4parser.muxer.tracks.AppendTrack
 import java.io.*
-import java.nio.ByteBuffer
 import java.text.SimpleDateFormat
 import java.util.*
 import java.util.concurrent.Future
@@ -65,28 +63,23 @@ open class MainActivity : AppCompatActivity() {
     private lateinit var mVideoSize: Size
     private lateinit var mPreviewSize: Size
     private lateinit var mImageSize: Size
-    private lateinit var mImageFileName: String
+    private lateinit var mImageFileName: File
     private lateinit var mImageFolder: File
     private lateinit var mVideoFolder: File
     private lateinit var mVideoFileName: String
-    private lateinit var mScreenSize:Size
     private var mChronometer: Chronometer? = null
     private var mTotalRotation: Int = 0
-    private var mIsTimeLapse: Boolean   = false
     private var   isCameraSwitched:Boolean = false
     private var isVideoPaused: Boolean = false
     private lateinit var progressDialogue: ProgressDialog
     private var mVideoFileList = mutableListOf<String>()
-    private var width:Int = 0
-    private var height:Int = 0
+
     private var mIsOddNumberVideo = true
+    private lateinit var file: File
     private var textureListener: SurfaceTextureListener = object : SurfaceTextureListener {
         override fun onSurfaceTextureAvailable(surface: SurfaceTexture, w: Int, h: Int) {
-            width = w
-            height = h
             setupCamera(w,h)
             openCamera()
-
         }
 
         override fun onSurfaceTextureSizeChanged(surface: SurfaceTexture, width: Int, height: Int) {
@@ -110,8 +103,7 @@ open class MainActivity : AppCompatActivity() {
         }
 
         override fun onDisconnected(camera: CameraDevice) {
-            camera?.close()
-            mCameraDevice = null
+           mCameraDevice?.close()
         }
 
         override fun onError(camera: CameraDevice, error: Int) {
@@ -120,11 +112,7 @@ open class MainActivity : AppCompatActivity() {
         }
     }
 
-    private val mOnImageAvailableListener =
-        ImageReader.OnImageAvailableListener { reader ->
-            mBackgroundHandler!!.post(ImageSaver(reader.acquireLatestImage(), mImageFileName))
 
-        }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -136,9 +124,9 @@ open class MainActivity : AppCompatActivity() {
         mChronometer = mainBinding.chronometer
         mChronometer!!.visibility = View.GONE
 
+        mCameraId = ID_CAMERA_BACK
         mTextureView!!.surfaceTextureListener = textureListener
 
-        mCameraId = ID_CAMERA_BACK
         ORIENTATIONS.append(Surface.ROTATION_0, 90)
         ORIENTATIONS.append(Surface.ROTATION_90, 0)
         ORIENTATIONS.append(Surface.ROTATION_180, 270)
@@ -155,21 +143,19 @@ open class MainActivity : AppCompatActivity() {
         mainBinding.ivStartStop.setOnClickListener {
             if (mIsRecordingVideo ) {
                 mIsRecordingVideo = false
+                mainBinding.ivStartStop.setBackgroundResource(R.drawable.ic_start_video_icon)
                 stopRecordingVideo()
                 closeCamera()
-                setupCamera(width,height)
+                setupCamera(mPreviewSize.width,mPreviewSize.height)
                 openCamera()
 
             } else {
                 mIsRecordingVideo = true
-                closeCamera()
-                setupCamera(width , height)
-                openCamera()
+                mainBinding.ivStartStop.setBackgroundResource(R.drawable.ic_stop)
                 startRecordingVideo()
 
             }
         }
-
 
         mainBinding.ivSwitchCamera.setOnClickListener {
             isCameraSwitched = true
@@ -181,14 +167,14 @@ open class MainActivity : AppCompatActivity() {
             if(mIsRecordingVideo) {
                 stopRecordingVideo()
                 closeCamera()
-                setupCamera(width,height)
+                setupCamera(mPreviewSize.width,mPreviewSize.height)
                 openCamera()
 
                 startRecordingVideo()
 
             } else {
                 closeCamera()
-                setupCamera(width,height)
+                setupCamera(mPreviewSize.width,mPreviewSize.height)
                 openCamera()
             }
         }
@@ -210,34 +196,6 @@ open class MainActivity : AppCompatActivity() {
         }
     }
 
-    private  class ImageSaver(private val mImage: Image, private val imageFileName: String) : Runnable {
-        override fun run() {
-            val byteBuffer = mImage.planes[0].buffer
-            val bytes = ByteArray(byteBuffer.remaining())
-            byteBuffer[bytes]
-            var fileOutputStream: FileOutputStream? = null
-            try {
-                fileOutputStream = FileOutputStream(imageFileName)
-                fileOutputStream!!.write(bytes)
-            } catch (e: IOException) {
-                e.printStackTrace()
-            } finally {
-                mImage.close()
-                val mediaStoreUpdateIntent = Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE)
-                mediaStoreUpdateIntent.data = Uri.fromFile(File(imageFileName))
-                if (fileOutputStream != null) {
-                    try {
-                        fileOutputStream.close()
-                    } catch (e: IOException) {
-                        e.printStackTrace()
-                    }
-                }
-            }
-        }
-
-    }
-
-
     /**
      * setup camera to take picture
      */
@@ -252,18 +210,32 @@ open class MainActivity : AppCompatActivity() {
                 val deviceOrientation = windowManager.defaultDisplay.rotation
                 mTotalRotation = sensorToDeviceRotation(cameraCharacteristics, deviceOrientation)
                 val swapRotation: Boolean = (mTotalRotation == 90 || mTotalRotation == 270)
-                var rotatedWidth: Int = width
-                var rotatedHeight: Int = height
+                val largestSize = Collections.max(listOf(*map!!.getOutputSizes(ImageFormat.JPEG)), CompareSizesByArea())
+                mPreviewSize = largestSize
+                var rotatedWidth: Int = largestSize.width
+                var rotatedHeight: Int = largestSize.height
                 if(swapRotation) {
-                     rotatedWidth = height
-                     rotatedHeight = width
+                     rotatedWidth = largestSize.width
+                     rotatedHeight = largestSize.width
                 }
 
-                mPreviewSize = chooseOptimalSize(map!!.getOutputSizes(SurfaceTexture::class.java), rotatedWidth, rotatedHeight)
-                mVideoSize = chooseOptimalSize(map.getOutputSizes(MediaRecorder::class.java), rotatedWidth, rotatedHeight)
-                mImageSize = chooseOptimalSize(map.getOutputSizes(ImageFormat.JPEG), rotatedWidth, rotatedHeight)
-                mImageReader = ImageReader.newInstance(mImageSize.width, mImageSize.height, ImageFormat.JPEG, 1)
-                mImageReader!!.setOnImageAvailableListener(mOnImageAvailableListener, mBackgroundHandler)
+
+                // Create an ImageReader to capture images
+                mImageReader = ImageReader.newInstance(largestSize.width, largestSize.height, ImageFormat.JPEG, 1)
+                mImageReader!!.setOnImageAvailableListener({ reader ->
+                    Toast.makeText(this@MainActivity, "Image saved", Toast.LENGTH_SHORT).show()
+                    val image = reader!!.acquireLatestImage()
+
+                    var byteBuffer = image.planes[0].buffer
+                    var byteArray = ByteArray(byteBuffer.remaining())
+                    byteBuffer.get(byteArray)
+
+                    val outPutStream = FileOutputStream(mImageFileName)
+                    outPutStream.write(byteArray)
+                    outPutStream.close()
+
+                    image.close()
+                }, mBackgroundHandler)
 
         } catch (e: Exception) {
            Log.e(TAG, e.message.toString())
@@ -324,10 +296,8 @@ open class MainActivity : AppCompatActivity() {
             builder.addDataSource(path)
         }
 
-
         // use DefaultVideoStrategy.exact(2560, 1440).build()  to restore 75% size of the video
         //  use DefaultVideoStrategy.exact(mScreenSize.height, mScreenSize.width).build()  to restore 50% size of the video
-
         val strategy: DefaultVideoStrategy = DefaultVideoStrategy.exact(640, 480).build()
 
          var mTranscodeFuture: Future<Void>? = builder
@@ -339,6 +309,7 @@ open class MainActivity : AppCompatActivity() {
                 override fun onTranscodeProgress(progress: Double) {}
 
                 override fun onTranscodeCompleted(successCode: Int) {
+                    progressDialogue.cancel()
                     Toast.makeText(this@MainActivity, "Video Merged Successfully", Toast.LENGTH_SHORT).show()
                 }
 
@@ -358,7 +329,7 @@ open class MainActivity : AppCompatActivity() {
                 }
 
             }).transcode()
-        progressDialogue.cancel()
+
     }
 
     private fun chooseOptimalSize(outputSizes: Array<Size>?, width: Int, height: Int): Size {
@@ -391,7 +362,9 @@ open class MainActivity : AppCompatActivity() {
             session: CameraCaptureSession,
             request: CaptureRequest,
             partialResult: CaptureResult,
-        ) { }
+        ) {
+
+        }
 
         override fun onCaptureCompleted(
             session: CameraCaptureSession,
@@ -477,7 +450,7 @@ open class MainActivity : AppCompatActivity() {
                 setOutputFile(mVideoFileName)
                 setVideoEncodingBitRate(3000000)
                 setVideoFrameRate(30)
-                setVideoSize(640,480)
+                setVideoSize(640,480) // (mScreenSize.width, mScreenSize.height)
                 setVideoEncoder(MediaRecorder.VideoEncoder.H264)
                 setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
                 if(mCameraId == ID_CAMERA_FRONT) {
@@ -496,102 +469,12 @@ open class MainActivity : AppCompatActivity() {
 
 
     private fun takePicture() {
-        if (mCameraDevice == null) {
-            Log.e(TAG, "cameraDevice is null")
-            return
-        }
-        val manager = getSystemService(Context.CAMERA_SERVICE) as CameraManager
         try {
-            val characteristics = manager.getCameraCharacteristics(
-                mCameraDevice!!.id
-            )
-            var jpegSizes: Array<Size>? = null
-            if (characteristics != null) {
-                jpegSizes =
-                    characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)!!
-                        .getOutputSizes(ImageFormat.JPEG)
-            }
-            var width = 640
-            var height = 480
-            if (!jpegSizes.isNullOrEmpty()) {
-                width = jpegSizes[0].width
-                height = jpegSizes[0].height
-            }
-            val reader: ImageReader = ImageReader.newInstance(width, height, ImageFormat.JPEG, 1)
-            val outputSurfaces: MutableList<Surface> = ArrayList<Surface>(2)
-            outputSurfaces.add(reader.surface)
-            outputSurfaces.add(Surface(mTextureView!!.surfaceTexture))
-            val captureBuilder =
-                mCameraDevice!!.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE)
-            captureBuilder.addTarget(reader.surface)
-            captureBuilder.set(CaptureRequest.CONTROL_MODE, CameraMetadata.CONTROL_MODE_AUTO)
-            // Orientation
-            val rotation = windowManager.defaultDisplay.rotation
-            captureBuilder.set(CaptureRequest.JPEG_ORIENTATION, ORIENTATIONS[rotation])
-            val file = File(Environment.getExternalStorageDirectory().toString() + "/pic.jpg")
-            val readerListener: ImageReader.OnImageAvailableListener =
-                object : ImageReader.OnImageAvailableListener {
-                    override fun onImageAvailable(reader: ImageReader) {
-                        var image: Image? = null
-                        try {
-                            image = reader.acquireLatestImage()
-                            val buffer: ByteBuffer = image.planes[0].buffer
-                            val bytes = ByteArray(buffer.capacity())
-                            buffer.get(bytes)
-                            save(bytes)
-                        } catch (e: FileNotFoundException) {
-                            e.printStackTrace()
-                        } catch (e: IOException) {
-                            e.printStackTrace()
-                        } finally {
-                            image?.close()
-                        }
-                    }
+            mImageFileName = createImageFileName()
+            mCaptureRequestBuilder = mCameraDevice!!.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE)
+            mCaptureRequestBuilder!!.addTarget(mImageReader!!.surface)
+            mCameraCaptureSessions!!.capture(mCaptureRequestBuilder!!.build(),null ,null)
 
-                    @Throws(IOException::class)
-                    private fun save(bytes: ByteArray) {
-                        var output: OutputStream? = null
-                        try {
-                            output = FileOutputStream(file)
-                            output!!.write(bytes)
-                        } finally {
-                            output?.close()
-                        }
-                    }
-                }
-            reader.setOnImageAvailableListener(readerListener, mBackgroundHandler)
-            val captureListener: CameraCaptureSession.CaptureCallback =
-                object : CameraCaptureSession.CaptureCallback() {
-                    override fun onCaptureCompleted(
-                        session: CameraCaptureSession,
-                        request: CaptureRequest,
-                        result: TotalCaptureResult,
-                    ) {
-                        super.onCaptureCompleted(session, request, result)
-                        Toast.makeText(this@MainActivity, "Saved:$file", Toast.LENGTH_SHORT)
-                            .show()
-                        createCameraPreview()
-                    }
-                }
-            mCameraDevice!!.createCaptureSession(
-                outputSurfaces,
-                object : CameraCaptureSession.StateCallback() {
-                    override fun onConfigured(session: CameraCaptureSession) {
-                        try {
-                            session.capture(
-                                captureBuilder.build(),
-                                captureListener,
-                                mBackgroundHandler
-                            )
-                        } catch (e: CameraAccessException) {
-                            e.printStackTrace()
-                        }
-                    }
-
-                    override fun onConfigureFailed(session: CameraCaptureSession) {}
-                },
-                mBackgroundHandler
-            )
         } catch (e: CameraAccessException) {
             e.printStackTrace()
         }
@@ -606,7 +489,7 @@ open class MainActivity : AppCompatActivity() {
                 mCameraDevice!!.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW)
             mCaptureRequestBuilder!!.addTarget(surface)
             mCameraDevice!!.createCaptureSession(
-                listOf(surface),
+                listOf(surface,mImageReader!!.surface),
                 object : CameraCaptureSession.StateCallback() {
                     override fun onConfigured(cameraCaptureSession: CameraCaptureSession) {
                         //The camera is already closed
@@ -641,6 +524,7 @@ open class MainActivity : AppCompatActivity() {
             isCameraSwitched = false
             val characteristics = manager.getCameraCharacteristics(mCameraId.toString())
             val map = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)!!
+            assert(map != null)
             mImageDimension = map.getOutputSizes(SurfaceTexture::class.java)[0]
             // Add permission for camera and let user grant the permission
             if (ActivityCompat.checkSelfPermission(
@@ -764,12 +648,10 @@ open class MainActivity : AppCompatActivity() {
         }
     }
 
-    private  fun createImageFileName(): File? {
+    private fun createImageFileName(): File {
         val timestamp: String = SimpleDateFormat("yyyyMMdd_HHmmss").format(Date())
         val prepend = "IMAGE_" + timestamp + "_"
-        val imageFile = File.createTempFile(prepend, ".jpg", mImageFolder)
-        mImageFileName = imageFile.absolutePath
-        return imageFile
+        return File.createTempFile(prepend, ".jpg", mImageFolder)
     }
 
     private  fun createVideoFileName(): File? {
@@ -802,9 +684,8 @@ open class MainActivity : AppCompatActivity() {
         Log.e(TAG, "onResume")
         startBackgroundThread()
         if (mTextureView!!.isAvailable) {
-            openCamera()
+           openCamera()
         } else {
-//            Toast.makeText(this, "TextureView not available", Toast.LENGTH_SHORT).show()
             mTextureView!!.surfaceTextureListener = textureListener
         }
 
@@ -822,7 +703,13 @@ open class MainActivity : AppCompatActivity() {
         const val ID_CAMERA_BACK = "0"
         const val TAG = "Camera2"
     }
+    class CompareSizesByArea : Comparator<Size> {
+        override fun compare(lhs: Size, rhs: Size): Int {
+            return java.lang.Long.signum(lhs.width.toLong() * lhs.height - rhs.width.toLong() * rhs.height)
+        }
+    }
 
 }
+
 
 
