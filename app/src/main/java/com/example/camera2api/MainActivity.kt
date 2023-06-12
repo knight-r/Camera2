@@ -4,9 +4,12 @@ import android.app.ProgressDialog
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Camera
+import android.graphics.Color
 import android.graphics.ImageFormat
 import android.graphics.SurfaceTexture
 import android.hardware.camera2.*
+import android.hardware.display.DisplayManager
 import android.media.ImageReader
 import android.media.MediaRecorder
 import android.net.Uri
@@ -41,11 +44,10 @@ import java.text.SimpleDateFormat
 import java.util.*
 import java.util.concurrent.Future
 
-open class MainActivity : AppCompatActivity() {
+open class MainActivity : AppCompatActivity(), View.OnClickListener {
 
     private var mTextureView: TextureView? = null
     private val ORIENTATIONS = SparseIntArray()
-
     private var mCameraId: String? = null
     protected var mCameraDevice: CameraDevice? = null
     protected var mCameraCaptureSessions: CameraCaptureSession? = null
@@ -69,31 +71,62 @@ open class MainActivity : AppCompatActivity() {
     private var mChronometer: Chronometer? = null
     private var mTotalRotation: Int = 0
     private var   isCameraSwitched:Boolean = false
-    private var isVideoPaused: Boolean = false
     private lateinit var progressDialogue: ProgressDialog
     private var mVideoFileList = mutableListOf<String>()
-    private lateinit var mSurfaceTexture: SurfaceTexture
     private var mIsOddNumberVideo = true
     private lateinit var file: File
     private var mWidth: Int =0
     private var mHeight: Int =0
+    private var mIsVideoCaptureOn: Boolean = false
+    private var mIsFlashOn: Boolean = false
+    private var mIsVideoPaused: Boolean = false
+    private lateinit var mCameraManager : CameraManager
+    private lateinit var mSurface: Surface
+
+    private val displayManager: DisplayManager by lazy {
+        applicationContext.getSystemService(DISPLAY_SERVICE) as DisplayManager
+    }
+
+    /** Keeps track of display rotations */
+    private var displayRotation = 0
+
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        displayManager.registerDisplayListener(displayListener,mBackgroundHandler)
+    }
+
+    override fun onDetachedFromWindow() {
+        super.onDetachedFromWindow()
+        displayManager.unregisterDisplayListener(displayListener)
+    }
+
+    private val displayListener = object : DisplayManager.DisplayListener {
+        override fun onDisplayAdded(displayId: Int) {}
+        override fun onDisplayRemoved(displayId: Int) {}
+        override fun onDisplayChanged(displayId: Int) {
+            val difference = displayManager.getDisplay(displayId).rotation - displayRotation
+            displayRotation = displayManager.getDisplay(displayId).rotation
+
+            if (difference == 2 || difference == -2) {
+                createCameraPreview()
+            }
+        }
+    }
     private var textureListener: SurfaceTextureListener = object : SurfaceTextureListener {
         override fun onSurfaceTextureAvailable(surface: SurfaceTexture, w: Int, h: Int) {
-            mSurfaceTexture = surface
-
             setupCamera(w,h)
             openCamera()
         }
 
         override fun onSurfaceTextureSizeChanged(surface: SurfaceTexture, width: Int, height: Int) {
             // Transform you image captured size according to the surface width and height
+            setupCamera(width,height)
+            openCamera()
         }
 
-        override fun onSurfaceTextureDestroyed(surface: SurfaceTexture): Boolean {
-            return false
-        }
+        override fun onSurfaceTextureDestroyed(surface: SurfaceTexture) = false
 
-        override fun onSurfaceTextureUpdated(surface: SurfaceTexture) {}
+        override fun onSurfaceTextureUpdated(surface: SurfaceTexture) = Unit
     }
 
     private val stateCallback: CameraDevice.StateCallback = object : CameraDevice.StateCallback() {
@@ -101,20 +134,30 @@ open class MainActivity : AppCompatActivity() {
             //This is called when the camera is open
             Log.e(TAG, "onOpened")
             mCameraDevice = camera
-            createCameraPreview()
+            try {
+                mBackgroundHandler!!.post {
+                    if (mTextureView!!.isAvailable) {
+                        createCameraPreview()
+                    }
+                    mTextureView!!.surfaceTextureListener = textureListener
+                }
+            } catch (t: Throwable) {
+                closeCamera()
+                Log.e(TAG, "Failed to initialize camera.", t)
+            }
+
 
         }
 
         override fun onDisconnected(camera: CameraDevice) {
-           mCameraDevice?.close()
+            camera.close()
         }
 
         override fun onError(camera: CameraDevice, error: Int) {
-            camera?.close()
+            camera.close()
             mCameraDevice = null
         }
     }
-
 
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -126,10 +169,10 @@ open class MainActivity : AppCompatActivity() {
         progressDialogue = ProgressDialog(this)
         mChronometer = mainBinding.chronometer
         mChronometer!!.visibility = View.GONE
-        mainBinding.ivPauseResume.visibility = View.GONE
 
         mCameraId = ID_CAMERA_BACK
         mTextureView!!.surfaceTextureListener = textureListener
+        mCameraManager = getSystemService(Context.CAMERA_SERVICE) as CameraManager
 
         ORIENTATIONS.append(Surface.ROTATION_0, 90)
         ORIENTATIONS.append(Surface.ROTATION_90, 0)
@@ -140,67 +183,173 @@ open class MainActivity : AppCompatActivity() {
         createImageFolder()
 
         mainBinding.chronometer.visibility = View.GONE
-        mainBinding.ivTakePicture.setOnClickListener {
-            takePicture()
-        }
-
-        mainBinding.ivStartStop.setOnClickListener {
-            if (mIsRecordingVideo ) {
-                mIsRecordingVideo = false
-                mainBinding.ivPauseResume.visibility = View.GONE
-                mainBinding.ivStartStop.setBackgroundResource(R.drawable.ic_start_video_icon)
-                stopRecordingVideo()
-                closeCamera()
-                setupCamera(mWidth,mHeight)
-                openCamera()
-
-            } else {
-                mIsRecordingVideo = true
-                mainBinding.ivPauseResume.visibility = View.VISIBLE
-                mainBinding.ivStartStop.setBackgroundResource(R.drawable.ic_stop)
-                startRecordingVideo()
-
-            }
-        }
-
-        mainBinding.ivSwitchCamera.setOnClickListener {
-            isCameraSwitched = true
-            mCameraId = if(mCameraId == ID_CAMERA_FRONT){
-                ID_CAMERA_BACK
-            } else {
-                ID_CAMERA_FRONT
-            }
-            if(mIsRecordingVideo) {
-                stopRecordingVideo()
-                closeCamera()
-                setupCamera(mWidth,mHeight)
-                openCamera()
-
-                startRecordingVideo()
-
-            } else {
-                closeCamera()
-                setupCamera(mWidth,mHeight)
-                openCamera()
-            }
-        }
-        var timeWhenPaused: Long = 0
-        mainBinding.ivPauseResume.setOnClickListener {
-            if (isVideoPaused) {
-                isVideoPaused = false
-                mainBinding.ivPauseResume.setImageResource(R.drawable.ic_pause_icon)
-                mChronometer!!.base = SystemClock.elapsedRealtime() + timeWhenPaused
-                mChronometer!!.start()
-                mMediaRecorder.resume()
-            } else {
-                isVideoPaused = true
-                mainBinding.ivPauseResume.setImageResource(R.drawable.ic_resume_icon)
-                timeWhenPaused = mChronometer!!.base - SystemClock.elapsedRealtime()
-                mChronometer!!.stop()
-                mMediaRecorder.pause()
-            }
-        }
+        mainBinding.tvPause.visibility= View.GONE
+        mainBinding.rlPauseResumeStop.visibility = View.GONE
+        initOnClickListeners()
     }
+
+    /**
+     *  all button clickListeners are implemented here
+     */
+    private fun initOnClickListeners() {
+        mainBinding.tvVideo.setOnClickListener(this)
+        mainBinding.tvCamera.setOnClickListener(this)
+        mainBinding.ibCapturePhoto.setOnClickListener(this)
+        mainBinding.tv1xZoom.setOnClickListener(this)
+        mainBinding.tv2xZoom.setOnClickListener(this)
+        mainBinding.ivFlash.setOnClickListener(this)
+        mainBinding.ibPauseResume.setOnClickListener(this)
+        mainBinding.ibStop.setOnClickListener(this)
+        mainBinding.ivPhotoGallery.setOnClickListener(this)
+        mainBinding.ivSwitchCamera.setOnClickListener(this)
+    }
+
+    /**
+     *  onClick functionalities are implemented here
+     */
+    override fun onClick(view: View?) {
+        when(view?.id ) {
+            mainBinding.tvVideo.id -> {
+                mIsVideoCaptureOn = true
+                mainBinding.ibCapturePhoto.setImageResource(R.drawable.ic_capture_video)
+
+                mainBinding.apply {
+                    rlTools.visibility = View.GONE
+                    tvVideo.setBackgroundResource(R.drawable.selected_background)
+                    tvVideo.setTextColor(Color.BLACK)
+                    tvCamera.setBackgroundResource(R.drawable.non_selected_background)
+                    tvCamera.setTextColor(Color.WHITE)
+
+                }
+            }
+
+            mainBinding.tvCamera.id -> {
+                mIsVideoCaptureOn = false
+
+                if (mIsRecordingVideo) {
+                    stopRecordingVideo()
+                }
+                mIsRecordingVideo = false
+                mainBinding.apply {
+                    ibPauseResume.setImageResource(R.drawable.ic_pause)
+                    ivPhotoGallery.setImageResource(R.drawable.ic_photo_gallery)
+                    rlPauseResumeStop.visibility = View.GONE
+                    tvPause.visibility = View.GONE
+                    ibCapturePhoto.visibility = View.VISIBLE
+                    ibCapturePhoto.setImageResource(R.drawable.ic_capture_photo)
+                    chronometer.visibility = View.GONE
+                    rlTools.visibility = View.VISIBLE
+                    tvCamera.setBackgroundResource(R.drawable.selected_background)
+                    tvCamera.setTextColor(Color.BLACK)
+                    tvVideo.setBackgroundResource(R.drawable.non_selected_background)
+                    tvVideo.setTextColor(Color.WHITE)
+
+                }
+
+            }
+            mainBinding.ibCapturePhoto.id -> {
+                if(mIsVideoCaptureOn) {
+                    startRecordingVideo()
+                } else {
+                    takePicture()
+
+                }
+            }
+            mainBinding.tv1xZoom.id  -> {
+                mainBinding.apply {
+                    tv1xZoom.setBackgroundResource(R.drawable.selected_background)
+                    tv1xZoom.setTextColor(Color.BLACK)
+                    tv2xZoom.setBackgroundResource(R.drawable.non_selected_background)
+                    tv2xZoom.setTextColor(Color.WHITE)
+                }
+            }
+            mainBinding.tv2xZoom.id -> {
+                mainBinding.apply {
+                    tv2xZoom.setBackgroundResource(R.drawable.selected_background)
+                    tv2xZoom.setTextColor(Color.BLACK)
+                    tv1xZoom.setBackgroundResource(R.drawable.non_selected_background)
+                    tv1xZoom.setTextColor(Color.WHITE)
+                }
+            }
+
+            mainBinding.ivFlash.id -> {
+               // implement flash on/off
+                if(mIsFlashOn) {
+                    mIsFlashOn = false
+                } else {
+                    mIsFlashOn = true
+                }
+
+
+            }
+            mainBinding.ibPauseResume.id -> {
+                if (mIsVideoPaused) {
+                    mIsVideoPaused = false
+                    mainBinding.ibPauseResume.setImageResource(R.drawable.ic_pause)
+                    mainBinding.chronometer.visibility = View.VISIBLE
+                    mainBinding.tvPause.visibility = View.GONE
+                    mMediaRecorder.resume()
+
+                } else {
+                    mIsVideoPaused = true
+                    mainBinding.ibPauseResume.setImageResource(R.drawable.ic_play)
+                    mainBinding.chronometer.visibility = View.GONE
+                    mainBinding.tvPause.visibility = View.VISIBLE
+                    mMediaRecorder.pause()
+                }
+            }
+
+            mainBinding.ibStop.id -> {
+                mainBinding.apply {
+                    rlPauseResumeStop.visibility = View.GONE
+                    ibCapturePhoto.visibility = View.VISIBLE
+                    chronometer.visibility = View.GONE
+                    ivPhotoGallery.setImageResource(R.drawable.ic_photo_gallery)
+                    tvPause.visibility = View.GONE
+                    ivPhotoGallery.setImageResource(R.drawable.ic_photo_gallery)
+                }
+                mIsRecordingVideo = false
+                stopRecordingVideo()
+                closeCamera()
+                setupCamera(mWidth,mHeight)
+                openCamera()
+
+
+            }
+            mainBinding.ivPhotoGallery.id -> {
+                if( mIsRecordingVideo) {
+                    takePicture()
+                } else {
+                    // show photo gallery
+                }
+            }
+
+            mainBinding.ivSwitchCamera.id -> {
+                isCameraSwitched = true
+                mCameraId = if(mCameraId == ID_CAMERA_FRONT){
+                    ID_CAMERA_BACK
+                } else {
+                    ID_CAMERA_FRONT
+                }
+                if(mIsRecordingVideo) {
+                    stopRecordingVideo()
+                    closeCamera()
+                    setupCamera(mWidth,mHeight)
+                    openCamera()
+
+                    startRecordingVideo()
+
+                } else {
+                    closeCamera()
+                    setupCamera(mWidth,mHeight)
+                    openCamera()
+                }
+            }
+
+        }
+
+    }
+
 
     /**
      * setup camera to take picture
@@ -211,6 +360,7 @@ open class MainActivity : AppCompatActivity() {
         try {
 
             val cameraCharacteristics = cameraManager.getCameraCharacteristics(mCameraId.toString())
+
             val map = cameraCharacteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
             val deviceOrientation = windowManager.defaultDisplay.rotation
             mTotalRotation = sensorToDeviceRotation(cameraCharacteristics, deviceOrientation)
@@ -225,29 +375,27 @@ open class MainActivity : AppCompatActivity() {
             }
             mPreviewSize = largestSize
 
-                // Create an ImageReader to capture images
-                mImageReader = ImageReader.newInstance(mPreviewSize.width, mPreviewSize.height, ImageFormat.JPEG, 1)
-                mImageReader!!.setOnImageAvailableListener({ reader ->
-                    Toast.makeText(this@MainActivity, "Image saved", Toast.LENGTH_SHORT).show()
-                    val image = reader!!.acquireLatestImage()
+            // Create an ImageReader to capture images
+            mImageReader = ImageReader.newInstance(mPreviewSize.width, mPreviewSize.height, ImageFormat.JPEG, 1)
+            mImageReader!!.setOnImageAvailableListener({ reader ->
+                Toast.makeText(this@MainActivity, "Image saved", Toast.LENGTH_SHORT).show()
+                val image = reader!!.acquireLatestImage()
 
-                    var byteBuffer = image.planes[0].buffer
-                    var byteArray = ByteArray(byteBuffer.remaining())
-                    byteBuffer.get(byteArray)
+                val byteBuffer = image.planes[0].buffer
+                val byteArray = ByteArray(byteBuffer.remaining())
+                byteBuffer.get(byteArray)
 
-                    val outPutStream = FileOutputStream(mImageFileName)
-                    outPutStream.write(byteArray)
-                    outPutStream.close()
+                val outPutStream = FileOutputStream(mImageFileName)
+                outPutStream.write(byteArray)
+                outPutStream.close()
 
-                    image.close()
-                }, mBackgroundHandler)
+                image.close()
+            }, mBackgroundHandler)
 
         } catch (e: Exception) {
-           Log.e(TAG, e.message.toString())
+            Log.e(TAG, e.message.toString())
         }
-     }
-
-
+    }
 
     private fun mergeVideosUsingMp4Parser(videoFiles: List<String>, outputFile: File) {
         try {
@@ -304,8 +452,8 @@ open class MainActivity : AppCompatActivity() {
         }
 
 
-         val strategy: DefaultVideoStrategy = DefaultVideoStrategy.exact(1920, 1080).build()
-         var mTranscodeFuture: Future<Void>? = builder
+        val strategy: DefaultVideoStrategy = DefaultVideoStrategy.exact(1920, 1080).build()
+        var mTranscodeFuture: Future<Void>? = builder
             .setAudioTrackStrategy(DefaultAudioStrategy.builder().build())
             .setVideoTrackStrategy(strategy)
             .setVideoRotation(0)
@@ -337,43 +485,19 @@ open class MainActivity : AppCompatActivity() {
 
     }
 
-
-
-    class CompareSizeByArea : Comparator<Size?> {
-
-         override fun compare(lhs: Size?, rhs: Size?): Int {
-             return java.lang.Long.signum((lhs!!.width * lhs.height).toLong() - (rhs!!.width * rhs.height).toLong())
-         }
-     }
-
-    private val captureSession = object : CameraCaptureSession.StateCallback() {
-        override fun onConfigureFailed(session: CameraCaptureSession) { }
-        override fun onConfigured(session: CameraCaptureSession) { }
-    }
-
-    private val captureCallback = object : CameraCaptureSession.CaptureCallback() {
-        override fun onCaptureProgressed(
-            session: CameraCaptureSession,
-            request: CaptureRequest,
-            partialResult: CaptureResult,
-        ) {
-
-        }
-
-        override fun onCaptureCompleted(
-            session: CameraCaptureSession,
-            request: CaptureRequest,
-            result: TotalCaptureResult,
-        ) { }
-    }
-
     private fun startRecordingVideo() {
         try {
+            mainBinding.apply {
+                chronometer.visibility = View.VISIBLE
+                ibCapturePhoto.visibility = View.GONE
+                rlPauseResumeStop.visibility = View.VISIBLE
+                ivPhotoGallery.setImageResource(R.drawable.ic_camera)
+            }
+            mIsRecordingVideo = true
             mMediaRecorder = MediaRecorder()
             mIsRecordingVideo = true
             createVideoFileName()
             mChronometer!!.base = SystemClock.elapsedRealtime()
-            mChronometer!!.visibility = View.VISIBLE
 
             mChronometer!!.start();
             setUpMediaRecorder()
@@ -388,10 +512,10 @@ open class MainActivity : AppCompatActivity() {
             mCaptureRequestBuilder!!.addTarget(recordSurface)
             mCameraDevice!!.createCaptureSession(
                 listOf(
-                previewSurface,
-                recordSurface,
-                mImageReader!!.surface
-            ),
+                    previewSurface,
+                    recordSurface,
+                    mImageReader!!.surface
+                ),
                 object : CameraCaptureSession.StateCallback() {
                     override fun onConfigured(session: CameraCaptureSession) {
                         mRecordCaptureSession = session
@@ -427,7 +551,7 @@ open class MainActivity : AppCompatActivity() {
         if (!mIsRecordingVideo) {
             val prepend = "Merged_VIDEO"
             val outputFile = File.createTempFile(prepend, ".mp4", mVideoFolder)
-           // mergeVideosUsingMp4Parser(mVideoFileList, outputFile)
+            // mergeVideosUsingMp4Parser(mVideoFileList, outputFile)
             mergeVideosUsingTranscoder(mVideoFileList,outputFile)
             mVideoFileList = mutableListOf<String>()
         }
@@ -444,7 +568,7 @@ open class MainActivity : AppCompatActivity() {
                 setOutputFile(mVideoFileName)
                 setVideoEncodingBitRate(10000000)
                 setVideoFrameRate(30)
-                setVideoSize(1280,720) // (mScreenSize.width, mScreenSize.height)
+                setVideoSize(1920,1080) // (mScreenSize.width, mScreenSize.height)
                 setVideoEncoder(MediaRecorder.VideoEncoder.H264)
                 setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
                 if(mCameraId == ID_CAMERA_FRONT) {
@@ -479,13 +603,14 @@ open class MainActivity : AppCompatActivity() {
     private fun createCameraPreview() {
         try {
 
-            mSurfaceTexture.setDefaultBufferSize(mImageDimension!!.width, mImageDimension!!.height)
-            val surface = Surface(mSurfaceTexture)
+            val surfaceTexture = CameraUtils.buildTargetTexture(mTextureView!!,mCameraManager.getCameraCharacteristics(mCameraId!!))
+            surfaceTexture!!.setDefaultBufferSize(mImageDimension!!.width, mImageDimension!!.height)
+            mSurface = Surface(surfaceTexture)
             mCaptureRequestBuilder =
                 mCameraDevice!!.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW)
-            mCaptureRequestBuilder!!.addTarget(surface)
+            mCaptureRequestBuilder!!.addTarget(mSurface)
             mCameraDevice!!.createCaptureSession(
-                listOf(surface,mImageReader!!.surface),
+                listOf(mSurface,mImageReader!!.surface),
                 object : CameraCaptureSession.StateCallback() {
                     override fun onConfigured(cameraCaptureSession: CameraCaptureSession) {
                         //The camera is already closed
@@ -513,12 +638,12 @@ open class MainActivity : AppCompatActivity() {
     }
 
     private fun openCamera() {
-        val manager = getSystemService(Context.CAMERA_SERVICE) as CameraManager
+
         Log.e(TAG, "is camera open")
         try {
 
             isCameraSwitched = false
-            val characteristics = manager.getCameraCharacteristics(mCameraId.toString())
+            val characteristics = mCameraManager.getCameraCharacteristics(mCameraId.toString())
             val map = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)!!
             assert(map != null)
             mImageDimension = map.getOutputSizes(SurfaceTexture::class.java)[0]
@@ -541,7 +666,7 @@ open class MainActivity : AppCompatActivity() {
                 )
                 return
             }
-            manager.openCamera(mCameraId.toString(), stateCallback, mBackgroundHandler)
+            mCameraManager.openCamera(mCameraId.toString(), stateCallback, mBackgroundHandler)
 
         } catch (e: CameraAccessException) {
             e.printStackTrace()
@@ -569,9 +694,11 @@ open class MainActivity : AppCompatActivity() {
     }
 
     private fun closeCamera() {
-        if ( mCameraDevice != null) {
-            mCameraDevice!!.close()
-            mCameraDevice = null
+        try {
+            mSurface?.release()
+            mCameraDevice?.close()
+        } catch (t: Throwable) {
+            Log.e(TAG, "Failed to release resources.", t)
         }
         if (null != mImageReader) {
             mImageReader!!.close()
@@ -588,7 +715,7 @@ open class MainActivity : AppCompatActivity() {
             == PackageManager.PERMISSION_GRANTED && ContextCompat.checkSelfPermission(this, android.Manifest.permission.RECORD_AUDIO)
             == PackageManager.PERMISSION_GRANTED
         ) {
-           // Toast.makeText(this, "All permissions granted", Toast.LENGTH_SHORT).show()
+            // Toast.makeText(this, "All permissions granted", Toast.LENGTH_SHORT).show()
         } else {
             if (shouldShowRequestPermissionRationale(android.Manifest.permission.WRITE_EXTERNAL_STORAGE )) {
                 Toast.makeText(this, "app needs permission to be able to save videos", Toast.LENGTH_SHORT)
@@ -601,6 +728,7 @@ open class MainActivity : AppCompatActivity() {
         }
 
     }
+
     override fun onRequestPermissionsResult(
         requestCode: Int,
         permissions: Array<String?>,
@@ -711,6 +839,5 @@ open class MainActivity : AppCompatActivity() {
     }
 
 }
-
 
 

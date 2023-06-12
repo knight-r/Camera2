@@ -1,6 +1,5 @@
 <resources>
     <string name="app_name">Camera2API</string>
-    <string name="take_picture">Take Picture</string>
-    <string name="pause">Pause</string>
-    <string name="start">Start</string>
+    <string name="camera">Camera</string>
+    <string name="video">Video</string>
 </resources>
