@@ -4,7 +4,6 @@ import android.app.ProgressDialog
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.graphics.Camera
 import android.graphics.Color
 import android.graphics.ImageFormat
 import android.graphics.SurfaceTexture
@@ -17,6 +16,7 @@ import android.os.*
 import android.util.Log
 import android.util.Size
 import android.util.SparseIntArray
+import android.view.Display
 import android.view.Surface
 import android.view.TextureView
 import android.view.TextureView.SurfaceTextureListener
@@ -376,7 +376,7 @@ open class MainActivity : AppCompatActivity(), View.OnClickListener {
             mPreviewSize = largestSize
 
             // Create an ImageReader to capture images
-            mImageReader = ImageReader.newInstance(mPreviewSize.width, mPreviewSize.height, ImageFormat.JPEG, 1)
+            mImageReader = ImageReader.newInstance(width, height, ImageFormat.JPEG, 1)
             mImageReader!!.setOnImageAvailableListener({ reader ->
                 Toast.makeText(this@MainActivity, "Image saved", Toast.LENGTH_SHORT).show()
                 val image = reader!!.acquireLatestImage()
@@ -603,23 +603,28 @@ open class MainActivity : AppCompatActivity(), View.OnClickListener {
     private fun createCameraPreview() {
         try {
 
-            val surfaceTexture = CameraUtils.buildTargetTexture(mTextureView!!,mCameraManager.getCameraCharacteristics(mCameraId!!))
-            surfaceTexture!!.setDefaultBufferSize(mImageDimension!!.width, mImageDimension!!.height)
+            val surfaceTexture = CameraUtils.buildTargetTexture(mTextureView!!,mCameraManager.getCameraCharacteristics(mCameraId!!),displayManager.getDisplay(
+                Display.DEFAULT_DISPLAY).rotation)
             mSurface = Surface(surfaceTexture)
             mCaptureRequestBuilder =
                 mCameraDevice!!.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW)
             mCaptureRequestBuilder!!.addTarget(mSurface)
             mCameraDevice!!.createCaptureSession(
-                listOf(mSurface,mImageReader!!.surface),
+                listOf(mSurface),
                 object : CameraCaptureSession.StateCallback() {
                     override fun onConfigured(cameraCaptureSession: CameraCaptureSession) {
-                        //The camera is already closed
-                        if (null == mCameraDevice) {
-                            return
+                        try {
+                            mCaptureRequestBuilder = mCameraDevice?.createCaptureRequest(
+                                CameraDevice.TEMPLATE_PREVIEW
+                            )
+                            mCaptureRequestBuilder?.addTarget(mSurface)
+                            cameraCaptureSession.setRepeatingRequest(
+                                mCaptureRequestBuilder?.build()!!, null, mBackgroundHandler
+                            )
+                            updatePreview()
+                        } catch (t: Throwable) {
+                            Log.e(TAG, "Failed to open camera preview.", t)
                         }
-                        // When the session is ready, we start displaying the preview.
-                        mCameraCaptureSessions = cameraCaptureSession
-                        updatePreview()
                     }
 
                     override fun onConfigureFailed(cameraCaptureSession: CameraCaptureSession) {
