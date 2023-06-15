@@ -1,11 +1,15 @@
 package com.example.camera2api
 
 import android.app.ProgressDialog
+import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.graphics.ImageFormat
+import android.graphics.Matrix
 import android.graphics.SurfaceTexture
 import android.hardware.camera2.*
 import android.hardware.display.DisplayManager
@@ -13,10 +17,12 @@ import android.media.ImageReader
 import android.media.MediaRecorder
 import android.net.Uri
 import android.os.*
+import android.provider.MediaStore
 import android.util.Log
 import android.util.Size
 import android.util.SparseIntArray
 import android.view.Display
+import android.view.OrientationEventListener
 import android.view.Surface
 import android.view.TextureView
 import android.view.TextureView.SurfaceTextureListener
@@ -26,6 +32,9 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.core.net.toUri
+import com.bumptech.glide.Glide
+import com.bumptech.glide.request.RequestOptions
 import com.example.camera2api.databinding.ActivityMainBinding
 import com.otaliastudios.transcoder.Transcoder
 import com.otaliastudios.transcoder.TranscoderListener
@@ -44,6 +53,7 @@ import java.text.SimpleDateFormat
 import java.util.*
 import java.util.concurrent.Future
 
+
 open class MainActivity : AppCompatActivity(), View.OnClickListener {
 
     private var mTextureView: TextureView? = null
@@ -61,20 +71,16 @@ open class MainActivity : AppCompatActivity(), View.OnClickListener {
     private var mIsRecordingVideo:Boolean = false
     private lateinit var mMediaRecorder: MediaRecorder
     private lateinit var mRecordCaptureSession: CameraCaptureSession
-    private lateinit var mVideoSize: Size
     private lateinit var mPreviewSize: Size
-    private lateinit var mImageSize: Size
     private lateinit var mImageFileName: File
     private lateinit var mImageFolder: File
     private lateinit var mVideoFolder: File
     private lateinit var mVideoFileName: String
     private var mChronometer: Chronometer? = null
     private var mTotalRotation: Int = 0
-    private var   isCameraSwitched:Boolean = false
+    private var isCameraSwitched:Boolean = false
     private lateinit var progressDialogue: ProgressDialog
     private var mVideoFileList = mutableListOf<String>()
-    private var mIsOddNumberVideo = true
-    private lateinit var file: File
     private var mWidth: Int =0
     private var mHeight: Int =0
     private var mIsVideoCaptureOn: Boolean = false
@@ -82,7 +88,9 @@ open class MainActivity : AppCompatActivity(), View.OnClickListener {
     private var mIsVideoPaused: Boolean = false
     private lateinit var mCameraManager : CameraManager
     private lateinit var mSurface: Surface
-
+    private lateinit var mMediaFileList: MutableList<File>
+    private var REQUEST_CODE_GALLERY: Int = 1001
+    private lateinit var mCameraCharacteristics: CameraCharacteristics
     private val displayManager: DisplayManager by lazy {
         applicationContext.getSystemService(DISPLAY_SERVICE) as DisplayManager
     }
@@ -167,6 +175,7 @@ open class MainActivity : AppCompatActivity(), View.OnClickListener {
         mTextureView = mainBinding.textureView
         assert(mTextureView != null)
         progressDialogue = ProgressDialog(this)
+        mMediaFileList = mutableListOf()
         mChronometer = mainBinding.chronometer
         mChronometer!!.visibility = View.GONE
 
@@ -251,6 +260,7 @@ open class MainActivity : AppCompatActivity(), View.OnClickListener {
                 if(mIsVideoCaptureOn) {
                     startRecordingVideo()
                 } else {
+//                    Toast.makeText(this, "capture started", Toast.LENGTH_SHORT).show()
                     takePicture()
 
                 }
@@ -273,14 +283,7 @@ open class MainActivity : AppCompatActivity(), View.OnClickListener {
             }
 
             mainBinding.ivFlash.id -> {
-               // implement flash on/off
-                if(mIsFlashOn) {
-                    mIsFlashOn = false
-                } else {
-                    mIsFlashOn = true
-                }
-
-
+               // implement on/off of flash
             }
             mainBinding.ibPauseResume.id -> {
                 if (mIsVideoPaused) {
@@ -320,7 +323,8 @@ open class MainActivity : AppCompatActivity(), View.OnClickListener {
                 if( mIsRecordingVideo) {
                     takePicture()
                 } else {
-                    // show photo gallery
+                    Log.e(TAG, "calling gallery activity")
+                    startGalleryActivity()
                 }
             }
 
@@ -350,50 +354,89 @@ open class MainActivity : AppCompatActivity(), View.OnClickListener {
 
     }
 
+    private fun startGalleryActivity() {
+//        Toast.makeText(this, mMediaFileList.size.toString(), Toast.LENGTH_SHORT).show()
+
+        if (mMediaFileList.size > 0) {
+            val intent = Intent(this, GalleryActivity::class.java)
+            val bundle = Bundle()
+            bundle.putSerializable("media_list",mMediaFileList as Serializable)
+            intent.putExtras(bundle)
+            startActivityForResult(intent, REQUEST_CODE_GALLERY)
+        } else {
+            Toast.makeText(this, "No media captured", Toast.LENGTH_SHORT).show()
+        }
+
+    }
+
 
     /**
      * setup camera to take picture
      */
     private fun setupCamera(width: Int, height: Int) {
-        val cameraManager = getSystemService(Context.CAMERA_SERVICE) as CameraManager
-
         try {
 
-            val cameraCharacteristics = cameraManager.getCameraCharacteristics(mCameraId.toString())
-
-            val map = cameraCharacteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
+           mCameraCharacteristics = mCameraManager.getCameraCharacteristics(mCameraId.toString())
+            val map = mCameraCharacteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
             val deviceOrientation = windowManager.defaultDisplay.rotation
-            mTotalRotation = sensorToDeviceRotation(cameraCharacteristics, deviceOrientation)
+            sensorToDeviceRotation(mCameraCharacteristics, deviceOrientation)
+            mTotalRotation = ORIENTATIONS[deviceOrientation]
             val swapRotation: Boolean = (mTotalRotation == 90 || mTotalRotation == 270)
             val largestSize = Collections.max(listOf(*map!!.getOutputSizes(ImageFormat.JPEG)), CompareSizesByArea())
-            mPreviewSize = largestSize
-            var rotatedWidth: Int = largestSize.width
-            var rotatedHeight: Int = largestSize.height
-            if(swapRotation) {
-                rotatedWidth = largestSize.width
-                rotatedHeight = largestSize.width
-            }
+
             mPreviewSize = largestSize
 
             // Create an ImageReader to capture images
-            mImageReader = ImageReader.newInstance(width, height, ImageFormat.JPEG, 1)
+            mImageReader = ImageReader.newInstance(largestSize.width, largestSize.height, ImageFormat.JPEG, 1)
             mImageReader!!.setOnImageAvailableListener({ reader ->
                 Toast.makeText(this@MainActivity, "Image saved", Toast.LENGTH_SHORT).show()
                 val image = reader!!.acquireLatestImage()
-
                 val byteBuffer = image.planes[0].buffer
                 val byteArray = ByteArray(byteBuffer.remaining())
                 byteBuffer.get(byteArray)
-
                 val outPutStream = FileOutputStream(mImageFileName)
-                outPutStream.write(byteArray)
+                if(mImageFileName.exists()) {
+                    mMediaFileList.add(mImageFileName)
+                }
+
+                val bitmap = BitmapFactory.decodeByteArray(byteArray, 0, byteArray.size)
+                val matrix = Matrix()
+                val sensorOrientation = mCameraCharacteristics.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 0
+                matrix.postRotate(sensorOrientation.toFloat())
+
+                val rotatedBitmap = Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+                mainBinding.ivPhotoGallery.post {
+                    mainBinding.ivPhotoGallery.setImageBitmap(rotatedBitmap)
+                }
+                rotatedBitmap.compress(Bitmap.CompressFormat.JPEG, 100, outPutStream)
                 outPutStream.close()
+
+
 
                 image.close()
             }, mBackgroundHandler)
 
         } catch (e: Exception) {
             Log.e(TAG, e.message.toString())
+        }
+    }
+
+    private fun saveImageData(bytes: ByteArray) {
+        val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+        val contentResolver = contentResolver
+        val contentValues = ContentValues()
+        contentValues.put(MediaStore.Images.Media.DISPLAY_NAME, "tekion_" + Date().time + ".jpg")
+        contentValues.put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
+
+// Save the image bytes to the gallery directory
+        val imageUri: Uri? =
+            contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
+        try {
+            val outputStream: OutputStream? = contentResolver.openOutputStream(imageUri!!)
+            bitmap.compress(Bitmap.CompressFormat.JPEG, 100, outputStream)
+            outputStream?.close()
+        } catch (e: IOException) {
+            e.printStackTrace()
         }
     }
 
@@ -499,7 +542,7 @@ open class MainActivity : AppCompatActivity(), View.OnClickListener {
             createVideoFileName()
             mChronometer!!.base = SystemClock.elapsedRealtime()
 
-            mChronometer!!.start();
+            mChronometer!!.start()
             setUpMediaRecorder()
             mMediaRecorder.start()
 
@@ -538,7 +581,6 @@ open class MainActivity : AppCompatActivity(), View.OnClickListener {
         }
     }
     private fun stopRecordingVideo() {
-        mIsOddNumberVideo = true
         mChronometer!!.stop()
         mChronometer!!.base = SystemClock.elapsedRealtime();
         mChronometer!!.visibility = View.GONE
@@ -548,11 +590,23 @@ open class MainActivity : AppCompatActivity(), View.OnClickListener {
         sendBroadcast(mediaStoreUpdateIntent)
         Toast.makeText(this, "Video saved to file explorer", Toast.LENGTH_SHORT).show()
         mVideoFileList.add(mVideoFileName)
+        val videoFile = File(mVideoFileName)
+        if(videoFile.exists()) {
+            Glide.with(this)
+                .setDefaultRequestOptions( RequestOptions().frame(1000000)) // capture a frame from 1 second into the video
+                .load(videoFile.toUri())
+                .into(mainBinding.ivPhotoGallery)
+            mMediaFileList.add(videoFile)
+        }
         if (!mIsRecordingVideo) {
             val prepend = "Merged_VIDEO"
             val outputFile = File.createTempFile(prepend, ".mp4", mVideoFolder)
+            mMediaFileList.add(outputFile)
             // mergeVideosUsingMp4Parser(mVideoFileList, outputFile)
-            mergeVideosUsingTranscoder(mVideoFileList,outputFile)
+            if(mVideoFileList.size > 1) {
+                mergeVideosUsingTranscoder(mVideoFileList,outputFile)
+            }
+
             mVideoFileList = mutableListOf<String>()
         }
 
@@ -585,7 +639,6 @@ open class MainActivity : AppCompatActivity(), View.OnClickListener {
     }
 
 
-
     private fun takePicture() {
         try {
             mImageFileName = createImageFileName()
@@ -608,18 +661,19 @@ open class MainActivity : AppCompatActivity(), View.OnClickListener {
             mSurface = Surface(surfaceTexture)
             mCaptureRequestBuilder =
                 mCameraDevice!!.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW)
-            mCaptureRequestBuilder!!.addTarget(mSurface)
+
             mCameraDevice!!.createCaptureSession(
-                listOf(mSurface),
+                listOf(mSurface, mImageReader!!.surface),
                 object : CameraCaptureSession.StateCallback() {
                     override fun onConfigured(cameraCaptureSession: CameraCaptureSession) {
                         try {
+                            mCameraCaptureSessions = cameraCaptureSession
                             mCaptureRequestBuilder = mCameraDevice?.createCaptureRequest(
-                                CameraDevice.TEMPLATE_PREVIEW
+                                CameraDevice.TEMPLATE_STILL_CAPTURE
                             )
                             mCaptureRequestBuilder?.addTarget(mSurface)
-                            cameraCaptureSession.setRepeatingRequest(
-                                mCaptureRequestBuilder?.build()!!, null, mBackgroundHandler
+                            mCameraCaptureSessions!!.setRepeatingRequest(
+                                mCaptureRequestBuilder?.build()!!,null, null
                             )
                             updatePreview()
                         } catch (t: Throwable) {
@@ -700,8 +754,8 @@ open class MainActivity : AppCompatActivity(), View.OnClickListener {
 
     private fun closeCamera() {
         try {
-            mSurface?.release()
-            mCameraDevice?.close()
+            mSurface.release()
+            mCameraDevice!!.close()
         } catch (t: Throwable) {
             Log.e(TAG, "Failed to release resources.", t)
         }
@@ -755,11 +809,13 @@ open class MainActivity : AppCompatActivity(), View.OnClickListener {
     private fun sensorToDeviceRotation(
         cameraCharacteristics: CameraCharacteristics,
         deviceOrientation: Int,
-    ): Int {
-        var deviceOrientation = deviceOrientation
-        val sensorOrientation = cameraCharacteristics.get(CameraCharacteristics.SENSOR_ORIENTATION)!!
-        deviceOrientation = ORIENTATIONS[deviceOrientation]
-        return (sensorOrientation + deviceOrientation + 360) % 360
+    ) {
+        val sensorOrientation = cameraCharacteristics.get(CameraCharacteristics.SENSOR_ORIENTATION)
+
+        val rotationCompensation = (sensorOrientation!! - deviceOrientation  + 270) % 360
+
+        val matrix = Matrix()
+        matrix.postRotate(rotationCompensation.toFloat())
     }
 
     private fun createVideoFolder() {
@@ -810,6 +866,19 @@ open class MainActivity : AppCompatActivity(), View.OnClickListener {
         }
     }
 
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (resultCode== RESULT_OK) {
+            when(requestCode) {
+                REQUEST_CODE_GALLERY -> {
+                    mMediaFileList = mutableListOf()
+                    val bundle: Bundle? = data?.extras
+                    var tempMediaFileList = bundle?.getSerializable("media_list") as MutableList<File>
+                    mMediaFileList.addAll(tempMediaFileList)
+                }
+            }
+        }
+    }
     override fun onResume() {
         super.onResume()
         Log.e(TAG, "onResume")
@@ -844,5 +913,3 @@ open class MainActivity : AppCompatActivity(), View.OnClickListener {
     }
 
 }
-
-

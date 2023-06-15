@@ -60,8 +60,8 @@
 
         <ImageView
             android:id="@+id/iv_photo_gallery"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
+            android:layout_width="@dimen/_50sdp"
+            android:layout_height="@dimen/_50sdp"
             android:src="@drawable/ic_photo_gallery"
             android:layout_centerVertical="true"
             android:layout_marginStart="@dimen/_60sdp"
@@ -264,6 +264,7 @@
         android:textColor="@color/white"
         android:textStyle="bold"
         android:textSize="@dimen/_10sdp"
+        android:visibility="gone"
         />
 
 
