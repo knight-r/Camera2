@@ -9,6 +9,7 @@ import java.util.Collections.max
 import kotlin.math.max
 
 object CameraUtils {
+
     /** Return the biggest preview size available which is smaller than the window */
     private fun findBestPreviewSize(windowSize: Size, characteristics: CameraCharacteristics):
             Size {

@@ -22,7 +22,7 @@ import com.google.android.exoplayer2.util.MimeTypes
 import java.io.File
 import java.io.Serializable
 
-class GalleryActivity : AppCompatActivity(), OnItemClickListener {
+class GalleryActivity : AppCompatActivity(), OnItemClickListener, View.OnClickListener {
     private lateinit var galleryBinding: ActivityGalleryBinding
     private var player: ExoPlayer? = null
     private var mIsVideo: Boolean = false
@@ -62,21 +62,38 @@ class GalleryActivity : AppCompatActivity(), OnItemClickListener {
             false
         )
 
-        galleryBinding.ivDelete.setOnClickListener {
-            if(updatedFileList.size<=1) {
-                // If he deleted all the files without saving any then cancel it.
+       initOnClickListener()
+    }
+
+    private fun initOnClickListener() {
+        galleryBinding.apply {
+            ivClose.setOnClickListener(this@GalleryActivity)
+            ivDelete.setOnClickListener(this@GalleryActivity)
+            ivSave.setOnClickListener(this@GalleryActivity)
+            ivRotateLeft.setOnClickListener(this@GalleryActivity)
+            ivRotateRight.setOnClickListener(this@GalleryActivity)
+        }
+
+    }
+    override fun onClick(v: View?) {
+        when(v!!.id) {
+            galleryBinding.ivClose.id -> {
                 processSavedData(true)
-            } else {
-                proceedDelete()
+            }
+            galleryBinding.ivDelete.id -> {
+                if(updatedFileList.size<=1) {
+                // If he deleted all the files without saving any then cancel it.
+                     processSavedData(true)
+                } else {
+                     proceedDelete()
+               }
+            }
+            galleryBinding.ivSave.id -> {
+                clearDeletedFiles(deletedFileList)
+                deletedFileList.clear()
+                processSavedData(false)
             }
         }
-
-        galleryBinding.ivSave.setOnClickListener {
-            clearDeletedFiles(deletedFileList)
-            deletedFileList.clear()
-            processSavedData(false)
-        }
-
     }
 
     private fun proceedDelete() {
@@ -161,6 +178,11 @@ class GalleryActivity : AppCompatActivity(), OnItemClickListener {
         player?.stop()
     }
 
+    override fun onStop() {
+        super.onStop()
+        player?.stop()
+    }
+
     override fun onItemClick(position: Int) {
         currentMediaPosition = position
         if(position>=0 && position<updatedFileList.size) {
@@ -177,4 +199,6 @@ class GalleryActivity : AppCompatActivity(), OnItemClickListener {
             }
         }
     }
+
+
 }

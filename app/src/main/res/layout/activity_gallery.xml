@@ -8,7 +8,6 @@
 
     <ImageView
         android:id="@+id/iv_full_screen_media"
-        android:layout_above="@id/rv_image_list"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         />
@@ -24,27 +23,63 @@
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/rv_image_list"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
+        android:layout_height="@dimen/_60sdp"
         android:layout_alignParentBottom="true"
         android:layout_margin="@dimen/_10sdp"
         tools:listitem="@layout/media_item" />
 
-    <ImageView
-        android:id="@+id/iv_delete"
-        android:layout_above="@+id/rv_image_list"
-        android:layout_marginBottom="10dp"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:src="@drawable/ic_delete"
-        />
+  <com.google.android.material.floatingactionbutton.FloatingActionButton
+      android:id="@+id/iv_save"
+      android:layout_alignParentEnd="true"
+      android:layout_alignParentBottom="true"
+      android:layout_margin="@dimen/_15sdp"
+      android:layout_width="wrap_content"
+      android:layout_height="wrap_content"
+      android:src="@drawable/ic_save"
+
+      />
+     <RelativeLayout
+         android:layout_width="match_parent"
+         android:layout_height="wrap_content"
+         android:layout_above="@+id/rv_image_list"
+         >
+
+
+         <ImageView
+             android:id="@+id/iv_rotate_left"
+             android:layout_alignParentStart="true"
+             android:layout_width="wrap_content"
+             android:layout_height="wrap_content"
+             android:layout_marginStart="@dimen/_80sdp"
+             android:src="@drawable/ic_rotate_anticlock_wise"
+             />
+
+         <ImageView
+             android:id="@+id/iv_rotate_right"
+             android:layout_centerHorizontal="true"
+             android:layout_width="wrap_content"
+             android:layout_height="wrap_content"
+             android:src="@drawable/ic_rotate_clock_wise"
+             />
+
+         <ImageView
+             android:id="@+id/iv_delete"
+             android:layout_alignParentRight="true"
+             android:layout_width="wrap_content"
+             android:layout_height="wrap_content"
+             android:layout_marginEnd="@dimen/_80sdp"
+             android:src="@drawable/ic_delete"
+             />
+     </RelativeLayout>
 
     <ImageView
-        android:id="@+id/iv_save"
-        android:layout_above="@+id/iv_delete"
-        android:layout_marginBottom="10dp"
+        android:id="@+id/iv_close"
+        android:layout_alignParentStart="true"
+        android:layout_marginStart="@dimen/_15sdp"
+        android:layout_marginTop="@dimen/_20sdp"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:src="@drawable/ic_rotate_left"
+        android:src="@drawable/ic_close"
         />
 
 </RelativeLayout>

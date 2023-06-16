@@ -86,6 +86,7 @@
             android:paddingTop="@dimen/_5sdp"
             android:paddingRight="@dimen/_5sdp"
             android:paddingBottom="@dimen/_5sdp"
+            android:visibility="gone"
             >
 
             <ImageButton
@@ -109,14 +110,15 @@
 
         </RelativeLayout>
 
-        <ImageButton
+        <ImageView
             android:id="@+id/iv_switch_camera"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_alignParentRight="true"
             android:layout_centerVertical="true"
             android:src="@drawable/ic_switch_camera"
-            android:background="@drawable/round_corner"
+            android:background="@drawable/ic_switch_camera_background"
+            android:padding="@dimen/_8sdp"
             android:layout_marginEnd="@dimen/_60sdp"
             />
 
@@ -247,6 +249,7 @@
         android:padding="@dimen/_5sdp"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
+        android:visibility="gone"
         />
     <TextView
         android:id="@+id/tv_pause"

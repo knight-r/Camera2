@@ -190,10 +190,6 @@ open class MainActivity : AppCompatActivity(), View.OnClickListener {
         checkPermissions()
         createVideoFolder()
         createImageFolder()
-
-        mainBinding.chronometer.visibility = View.GONE
-        mainBinding.tvPause.visibility= View.GONE
-        mainBinding.rlPauseResumeStop.visibility = View.GONE
         initOnClickListeners()
     }
 
@@ -385,7 +381,6 @@ open class MainActivity : AppCompatActivity(), View.OnClickListener {
             val largestSize = Collections.max(listOf(*map!!.getOutputSizes(ImageFormat.JPEG)), CompareSizesByArea())
 
             mPreviewSize = largestSize
-
             // Create an ImageReader to capture images
             mImageReader = ImageReader.newInstance(largestSize.width, largestSize.height, ImageFormat.JPEG, 1)
             mImageReader!!.setOnImageAvailableListener({ reader ->
@@ -398,7 +393,6 @@ open class MainActivity : AppCompatActivity(), View.OnClickListener {
                 if(mImageFileName.exists()) {
                     mMediaFileList.add(mImageFileName)
                 }
-
                 val bitmap = BitmapFactory.decodeByteArray(byteArray, 0, byteArray.size)
                 val matrix = Matrix()
                 val sensorOrientation = mCameraCharacteristics.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 0
@@ -411,32 +405,11 @@ open class MainActivity : AppCompatActivity(), View.OnClickListener {
                 rotatedBitmap.compress(Bitmap.CompressFormat.JPEG, 100, outPutStream)
                 outPutStream.close()
 
-
-
                 image.close()
             }, mBackgroundHandler)
 
         } catch (e: Exception) {
             Log.e(TAG, e.message.toString())
-        }
-    }
-
-    private fun saveImageData(bytes: ByteArray) {
-        val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-        val contentResolver = contentResolver
-        val contentValues = ContentValues()
-        contentValues.put(MediaStore.Images.Media.DISPLAY_NAME, "tekion_" + Date().time + ".jpg")
-        contentValues.put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
-
-// Save the image bytes to the gallery directory
-        val imageUri: Uri? =
-            contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
-        try {
-            val outputStream: OutputStream? = contentResolver.openOutputStream(imageUri!!)
-            bitmap.compress(Bitmap.CompressFormat.JPEG, 100, outputStream)
-            outputStream?.close()
-        } catch (e: IOException) {
-            e.printStackTrace()
         }
     }
 
@@ -526,6 +499,7 @@ open class MainActivity : AppCompatActivity(), View.OnClickListener {
 
             }).transcode()
 
+
     }
 
     private fun startRecordingVideo() {
@@ -546,16 +520,14 @@ open class MainActivity : AppCompatActivity(), View.OnClickListener {
             setUpMediaRecorder()
             mMediaRecorder.start()
 
-            val surfaceTexture: SurfaceTexture? = mainBinding.textureView.surfaceTexture
-            surfaceTexture!!.setDefaultBufferSize(mPreviewSize.width, mPreviewSize.height)
-            val previewSurface = Surface(surfaceTexture)
+
             val recordSurface = mMediaRecorder.surface
             mCaptureRequestBuilder = mCameraDevice!!.createCaptureRequest(CameraDevice.TEMPLATE_RECORD)
-            mCaptureRequestBuilder!!.addTarget(previewSurface)
+            mCaptureRequestBuilder!!.addTarget(mSurface)
             mCaptureRequestBuilder!!.addTarget(recordSurface)
             mCameraDevice!!.createCaptureSession(
                 listOf(
-                    previewSurface,
+                    mSurface,
                     recordSurface,
                     mImageReader!!.surface
                 ),
@@ -598,17 +570,14 @@ open class MainActivity : AppCompatActivity(), View.OnClickListener {
                 .into(mainBinding.ivPhotoGallery)
             mMediaFileList.add(videoFile)
         }
-        if (!mIsRecordingVideo) {
+        if (!mIsRecordingVideo && mVideoFileList.size > 1) {
             val prepend = "Merged_VIDEO"
             val outputFile = File.createTempFile(prepend, ".mp4", mVideoFolder)
             mMediaFileList.add(outputFile)
-            // mergeVideosUsingMp4Parser(mVideoFileList, outputFile)
-            if(mVideoFileList.size > 1) {
-                mergeVideosUsingTranscoder(mVideoFileList,outputFile)
-            }
+            mergeVideosUsingTranscoder(mVideoFileList,outputFile)
 
-            mVideoFileList = mutableListOf<String>()
         }
+        mVideoFileList = mutableListOf<String>()
 
     }
 
@@ -883,6 +852,10 @@ open class MainActivity : AppCompatActivity(), View.OnClickListener {
         super.onResume()
         Log.e(TAG, "onResume")
         startBackgroundThread()
+        if (mIsRecordingVideo) {
+            mMediaRecorder.resume()
+            mChronometer!!.start()
+        }
         if (mTextureView!!.isAvailable) {
             setupCamera(mWidth,mHeight)
             openCamera()
@@ -890,12 +863,17 @@ open class MainActivity : AppCompatActivity(), View.OnClickListener {
             mTextureView!!.surfaceTextureListener = textureListener
         }
 
+
     }
 
     override fun onPause() {
         Log.e(TAG, "onPause")
         closeCamera()
         stopBackgroundThread()
+        if (mIsRecordingVideo) {
+            mMediaRecorder.pause()
+            mChronometer!!.stop()
+        }
         super.onPause()
     }
 
