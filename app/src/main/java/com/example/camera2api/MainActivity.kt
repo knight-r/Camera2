@@ -570,10 +570,9 @@ open class MainActivity : AppCompatActivity(), View.OnClickListener {
                 .into(mainBinding.ivPhotoGallery)
             mMediaFileList.add(videoFile)
         }
-        if (!mIsRecordingVideo && mVideoFileList.size > 1) {
+        if (!mIsRecordingVideo ) {
             val prepend = "Merged_VIDEO"
             val outputFile = File.createTempFile(prepend, ".mp4", mVideoFolder)
-            mMediaFileList.add(outputFile)
             mergeVideosUsingTranscoder(mVideoFileList,outputFile)
 
         }
@@ -583,7 +582,6 @@ open class MainActivity : AppCompatActivity(), View.OnClickListener {
 
     private fun setUpMediaRecorder() {
         try {
-
             mMediaRecorder?.apply {
                 setVideoSource(MediaRecorder.VideoSource.SURFACE)
                 setAudioSource(MediaRecorder.AudioSource.MIC)
