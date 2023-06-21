@@ -11,4 +11,5 @@
     <color name="blue">#4677F3</color>
     <color name="tools_background_color">#3F4757</color>
     <color name="selected_option_color">#DCFAF6</color>
+    <color name="grey">#DEDFE1</color>
 </resources>

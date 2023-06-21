@@ -1,7 +1,6 @@
 package com.example.camera2api
 
 import android.app.ProgressDialog
-import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -17,22 +16,23 @@ import android.media.ImageReader
 import android.media.MediaRecorder
 import android.net.Uri
 import android.os.*
-import android.provider.MediaStore
+import android.text.SpannableStringBuilder
 import android.util.Log
 import android.util.Size
 import android.util.SparseIntArray
 import android.view.Display
-import android.view.OrientationEventListener
 import android.view.Surface
 import android.view.TextureView
 import android.view.TextureView.SurfaceTextureListener
 import android.view.View
 import android.widget.Chronometer
+import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
+import androidx.core.text.bold
 import com.bumptech.glide.Glide
 import com.bumptech.glide.request.RequestOptions
 import com.example.camera2api.databinding.ActivityMainBinding
@@ -69,6 +69,7 @@ open class MainActivity : AppCompatActivity(), View.OnClickListener {
     private var mBackgroundThreadHandler: HandlerThread? = null
     private lateinit var mainBinding: ActivityMainBinding
     private var mIsRecordingVideo:Boolean = false
+    private var mTimeWhenPaused: Long = 0
     private lateinit var mMediaRecorder: MediaRecorder
     private lateinit var mRecordCaptureSession: CameraCaptureSession
     private lateinit var mPreviewSize: Size
@@ -91,6 +92,7 @@ open class MainActivity : AppCompatActivity(), View.OnClickListener {
     private lateinit var mMediaFileList: MutableList<File>
     private var REQUEST_CODE_GALLERY: Int = 1001
     private lateinit var mCameraCharacteristics: CameraCharacteristics
+    private lateinit var mediaCountTV: TextView
     private val displayManager: DisplayManager by lazy {
         applicationContext.getSystemService(DISPLAY_SERVICE) as DisplayManager
     }
@@ -182,7 +184,7 @@ open class MainActivity : AppCompatActivity(), View.OnClickListener {
         mCameraId = ID_CAMERA_BACK
         mTextureView!!.surfaceTextureListener = textureListener
         mCameraManager = getSystemService(Context.CAMERA_SERVICE) as CameraManager
-
+        mediaCountTV = mainBinding.tvMediaCount
         ORIENTATIONS.append(Surface.ROTATION_0, 90)
         ORIENTATIONS.append(Surface.ROTATION_90, 0)
         ORIENTATIONS.append(Surface.ROTATION_180, 270)
@@ -205,8 +207,19 @@ open class MainActivity : AppCompatActivity(), View.OnClickListener {
         mainBinding.ivFlash.setOnClickListener(this)
         mainBinding.ibPauseResume.setOnClickListener(this)
         mainBinding.ibStop.setOnClickListener(this)
-        mainBinding.ivPhotoGallery.setOnClickListener(this)
+        mainBinding.rlGallery.setOnClickListener(this)
         mainBinding.ivSwitchCamera.setOnClickListener(this)
+
+        mainBinding.ivFlashOn.setOnClickListener(this)
+        mainBinding.ivFlashOff.setOnClickListener(this)
+        mainBinding.ivAutoFlash.setOnClickListener(this)
+        mainBinding.ivSingleCaptureMode.setOnClickListener(this)
+        mainBinding.ivDualCaptureMode.setOnClickListener(this)
+        mainBinding.ivSetting.setOnClickListener(this)
+        mainBinding.root.setOnClickListener(this)
+        mainBinding.ivCaptureType.setOnClickListener(this)
+
+
     }
 
     /**
@@ -237,7 +250,7 @@ open class MainActivity : AppCompatActivity(), View.OnClickListener {
                 mIsRecordingVideo = false
                 mainBinding.apply {
                     ibPauseResume.setImageResource(R.drawable.ic_pause)
-                    ivPhotoGallery.setImageResource(R.drawable.ic_photo_gallery)
+                 //   ivPhotoGallery.setImageResource(R.drawable.ic_photo_gallery)
                     rlPauseResumeStop.visibility = View.GONE
                     tvPause.visibility = View.GONE
                     ibCapturePhoto.visibility = View.VISIBLE
@@ -254,6 +267,8 @@ open class MainActivity : AppCompatActivity(), View.OnClickListener {
             }
             mainBinding.ibCapturePhoto.id -> {
                 if(mIsVideoCaptureOn) {
+                    mVideoFileList.clear()
+                    mTimeWhenPaused = 0
                     startRecordingVideo()
                 } else {
 //                    Toast.makeText(this, "capture started", Toast.LENGTH_SHORT).show()
@@ -278,9 +293,7 @@ open class MainActivity : AppCompatActivity(), View.OnClickListener {
                 }
             }
 
-            mainBinding.ivFlash.id -> {
-               // implement on/off of flash
-            }
+
             mainBinding.ibPauseResume.id -> {
                 if (mIsVideoPaused) {
                     mIsVideoPaused = false
@@ -288,12 +301,15 @@ open class MainActivity : AppCompatActivity(), View.OnClickListener {
                     mainBinding.chronometer.visibility = View.VISIBLE
                     mainBinding.tvPause.visibility = View.GONE
                     mMediaRecorder.resume()
+                    mChronometer!!.base = SystemClock.elapsedRealtime() + mTimeWhenPaused
 
                 } else {
                     mIsVideoPaused = true
+                    mTimeWhenPaused = mChronometer!!.base - SystemClock.elapsedRealtime()
                     mainBinding.ibPauseResume.setImageResource(R.drawable.ic_play)
                     mainBinding.chronometer.visibility = View.GONE
                     mainBinding.tvPause.visibility = View.VISIBLE
+                    mainBinding.tvPause.text = "Paused ${mChronometer!!.text}"
                     mMediaRecorder.pause()
                 }
             }
@@ -303,9 +319,9 @@ open class MainActivity : AppCompatActivity(), View.OnClickListener {
                     rlPauseResumeStop.visibility = View.GONE
                     ibCapturePhoto.visibility = View.VISIBLE
                     chronometer.visibility = View.GONE
-                    ivPhotoGallery.setImageResource(R.drawable.ic_photo_gallery)
+               //     ivPhotoGallery.setImageResource(R.drawable.ic_photo_gallery)
                     tvPause.visibility = View.GONE
-                    ivPhotoGallery.setImageResource(R.drawable.ic_photo_gallery)
+                   // ivPhotoGallery.setImageResource(R.drawable.ic_photo_gallery)
                 }
                 mIsRecordingVideo = false
                 stopRecordingVideo()
@@ -315,7 +331,7 @@ open class MainActivity : AppCompatActivity(), View.OnClickListener {
 
 
             }
-            mainBinding.ivPhotoGallery.id -> {
+            mainBinding.rlGallery.id -> {
                 if( mIsRecordingVideo) {
                     takePicture()
                 } else {
@@ -346,12 +362,134 @@ open class MainActivity : AppCompatActivity(), View.OnClickListener {
                 }
             }
 
+            /**
+             *  implementation of setting button functionalities
+             */
+
+            mainBinding.root.id -> {
+                mainBinding.ivSetting.visibility = View.VISIBLE
+                mainBinding.rlSetting.visibility = View.GONE
+                mainBinding.ivSetting.visibility = View.VISIBLE
+            }
+            mainBinding.ivFlashOn.id -> {
+                mainBinding.rlSetting.visibility = View.GONE
+                mainBinding.ivSetting.visibility = View.VISIBLE
+                val str = SpannableStringBuilder()
+                    .append(getString(R.string.flash_light))
+                    .append("\n")
+                    .bold { append("On") }
+                mainBinding.tvFlashLight.text = str
+                mainBinding.ivFlashOn.setImageResource(R.drawable.ic_flash_on_selected)
+                mainBinding.ivFlash.setImageResource(R.drawable.ic_flash_on_selected)
+                mainBinding.ivFlashOff.setImageResource(R.drawable.ic_flash_off_not_selected)
+                mainBinding.ivAutoFlash.setImageResource(R.drawable.ic_auto_flash_not_selected)
+
+                // turn on flash
+            }
+
+            mainBinding.ivFlashOff.id -> {
+                mainBinding.rlSetting.visibility = View.GONE
+                mainBinding.ivSetting.visibility = View.VISIBLE
+                val str = SpannableStringBuilder()
+                    .append(getString(R.string.flash_light))
+                    .append("\n")
+                    .bold { append("Off") }
+                mainBinding.tvFlashLight.text = str
+                mainBinding.ivFlashOn.setImageResource(R.drawable.ic_flash_on_not_selected)
+                mainBinding.ivFlashOff.setImageResource(R.drawable.ic_flash_off_selected)
+                mainBinding.ivFlash.setImageResource(R.drawable.ic_flash_off_selected)
+                mainBinding.ivAutoFlash.setImageResource(R.drawable.ic_auto_flash_not_selected)                // turn off flash
+            }
+
+            mainBinding.ivAutoFlash.id -> {
+                mainBinding.rlSetting.visibility = View.GONE
+                mainBinding.ivSetting.visibility = View.VISIBLE
+                val str = SpannableStringBuilder()
+                    .append(getString(R.string.flash_light))
+                    .append("\n")
+                    .bold { append("Auto") }
+                mainBinding.tvFlashLight.text = str
+                mainBinding.ivFlashOn.setImageResource(R.drawable.ic_flash_on_not_selected)
+                mainBinding.ivFlashOff.setImageResource(R.drawable.ic_flash_off_not_selected)
+                mainBinding.ivAutoFlash.setImageResource(R.drawable.ic_auto_flash_selected)
+                mainBinding.ivFlash.setImageResource(R.drawable.ic_auto_flash_selected)
+
+
+                // auto flash on
+            }
+
+            mainBinding.ivSingleCaptureMode.id -> {
+                mainBinding.rlSetting.visibility = View.GONE
+                mainBinding.ivSetting.visibility = View.VISIBLE
+                val str = SpannableStringBuilder()
+                    .append(getString(R.string.capture_type))
+                    .append("\n")
+                    .bold { append("Single") }
+                mainBinding.tvCaptureType.text = str
+                mainBinding.ivSingleCaptureMode.setImageResource(R.drawable.ic_single_capture_mode_selected)
+                mainBinding.ivCaptureType.setImageResource(R.drawable.ic_single_capture_mode_selected)
+                mainBinding.ivDualCaptureMode.setImageResource(R.drawable.ic_dual_capture_mode_not_selected)
+                // switch to single capture mode
+            }
+
+            mainBinding.ivDualCaptureMode.id -> {
+                mainBinding.rlSetting.visibility = View.GONE
+                mainBinding.ivSetting.visibility = View.VISIBLE
+                val str = SpannableStringBuilder()
+                    .append(getString(R.string.capture_type))
+                    .append("\n")
+                    .bold { append("Dual") }
+                mainBinding.tvCaptureType.text = str
+                mainBinding.ivSingleCaptureMode.setImageResource(R.drawable.ic_single_capture_mode_not_selected)
+                mainBinding.ivDualCaptureMode.setImageResource(R.drawable.ic_dual_capture_mode_selected)
+                mainBinding.ivCaptureType.setImageResource(R.drawable.ic_dual_capture_mode_selected)
+
+
+                // switch to dual capture mode
+            }
+
+            mainBinding.ivSetting.id -> {
+                mainBinding.ivSetting.visibility = View.GONE
+                mainBinding.rlSetting.visibility = View.VISIBLE
+                mainBinding.rlCaptureType.visibility = View.VISIBLE
+                mainBinding.rlFlashLight.visibility = View.VISIBLE
+            }
+
+            mainBinding.ivCaptureType.id -> {
+                mainBinding.ivSetting.visibility = View.GONE
+                mainBinding.rlSetting.visibility = View.VISIBLE
+                mainBinding.rlFlashLight.visibility = View.GONE
+                mainBinding.rlCaptureType.visibility = View.VISIBLE
+            }
+            mainBinding.ivFlash.id -> {
+                mainBinding.ivSetting.visibility = View.GONE
+                mainBinding.rlSetting.visibility = View.VISIBLE
+                mainBinding.rlCaptureType.visibility = View.GONE
+                mainBinding.rlFlashLight.visibility = View.VISIBLE
+                // implement on/off of flash
+            }
+
+
+
         }
 
     }
 
+    private fun updateMediaCount() {
+        runOnUiThread {
+            mainBinding.tvMediaCount.text = mMediaFileList.size.toString()
+            if (mMediaFileList.size > 0) {
+                mainBinding.ivNext.visibility = View.GONE
+                mainBinding.rlGallery.visibility = View.VISIBLE
+            } else {
+                mainBinding.ivNext.visibility = View.VISIBLE
+                mainBinding.rlGallery.visibility = View.GONE
+            }
+        }
+    }
+
     private fun startGalleryActivity() {
-//        Toast.makeText(this, mMediaFileList.size.toString(), Toast.LENGTH_SHORT).show()
+//      Toast.makeText(this, mMediaFileList.size.toString(), Toast.LENGTH_SHORT).show()
 
         if (mMediaFileList.size > 0) {
             val intent = Intent(this, GalleryActivity::class.java)
@@ -392,6 +530,8 @@ open class MainActivity : AppCompatActivity(), View.OnClickListener {
                 val outPutStream = FileOutputStream(mImageFileName)
                 if(mImageFileName.exists()) {
                     mMediaFileList.add(mImageFileName)
+                    updateMediaCount()
+
                 }
                 val bitmap = BitmapFactory.decodeByteArray(byteArray, 0, byteArray.size)
                 val matrix = Matrix()
@@ -399,14 +539,13 @@ open class MainActivity : AppCompatActivity(), View.OnClickListener {
                 matrix.postRotate(sensorOrientation.toFloat())
 
                 val rotatedBitmap = Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
-                mainBinding.ivPhotoGallery.post {
-                    mainBinding.ivPhotoGallery.setImageBitmap(rotatedBitmap)
-                }
+
                 rotatedBitmap.compress(Bitmap.CompressFormat.JPEG, 100, outPutStream)
                 outPutStream.close()
-
                 image.close()
             }, mBackgroundHandler)
+
+
 
         } catch (e: Exception) {
             Log.e(TAG, e.message.toString())
@@ -480,6 +619,9 @@ open class MainActivity : AppCompatActivity(), View.OnClickListener {
                 override fun onTranscodeCompleted(successCode: Int) {
                     progressDialogue.cancel()
                     Toast.makeText(this@MainActivity, "Video Merged Successfully", Toast.LENGTH_SHORT).show()
+                    mMediaFileList.add(outputFile)
+                    updateMediaCount()
+                    mVideoFileList.clear()
                 }
 
                 override fun onTranscodeCanceled() {
@@ -508,13 +650,11 @@ open class MainActivity : AppCompatActivity(), View.OnClickListener {
                 chronometer.visibility = View.VISIBLE
                 ibCapturePhoto.visibility = View.GONE
                 rlPauseResumeStop.visibility = View.VISIBLE
-                ivPhotoGallery.setImageResource(R.drawable.ic_camera)
             }
             mIsRecordingVideo = true
             mMediaRecorder = MediaRecorder()
-            mIsRecordingVideo = true
             createVideoFileName()
-            mChronometer!!.base = SystemClock.elapsedRealtime()
+            mChronometer!!.base = SystemClock.elapsedRealtime() + mTimeWhenPaused
 
             mChronometer!!.start()
             setUpMediaRecorder()
@@ -554,29 +694,30 @@ open class MainActivity : AppCompatActivity(), View.OnClickListener {
     }
     private fun stopRecordingVideo() {
         mChronometer!!.stop()
+        mTimeWhenPaused = mChronometer!!.base - SystemClock.elapsedRealtime()
         mChronometer!!.base = SystemClock.elapsedRealtime();
         mChronometer!!.visibility = View.GONE
         mMediaRecorder.reset()
+
         val mediaStoreUpdateIntent = Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE)
         mediaStoreUpdateIntent.data = Uri.fromFile(File(mVideoFileName))
         sendBroadcast(mediaStoreUpdateIntent)
         Toast.makeText(this, "Video saved to file explorer", Toast.LENGTH_SHORT).show()
         mVideoFileList.add(mVideoFileName)
         val videoFile = File(mVideoFileName)
-        if(videoFile.exists()) {
-            Glide.with(this)
-                .setDefaultRequestOptions( RequestOptions().frame(1000000)) // capture a frame from 1 second into the video
-                .load(videoFile.toUri())
-                .into(mainBinding.ivPhotoGallery)
-            mMediaFileList.add(videoFile)
-        }
+
         if (!mIsRecordingVideo ) {
             val prepend = "Merged_VIDEO"
             val outputFile = File.createTempFile(prepend, ".mp4", mVideoFolder)
-            mergeVideosUsingTranscoder(mVideoFileList,outputFile)
+            Toast.makeText(this, mVideoFileList.size.toString(), Toast.LENGTH_SHORT).show()
+            if(mVideoFileList.size > 1) {
+                mergeVideosUsingTranscoder(mVideoFileList,outputFile)
+            } else {
+                mMediaFileList.add(videoFile)
+            }
 
         }
-        mVideoFileList = mutableListOf<String>()
+
 
     }
 
@@ -697,7 +838,7 @@ open class MainActivity : AppCompatActivity(), View.OnClickListener {
         } catch (e: CameraAccessException) {
             e.printStackTrace()
         }
-        Log.e(TAG, "openCamera X")
+
     }
 
     private fun updatePreview() {
@@ -842,6 +983,7 @@ open class MainActivity : AppCompatActivity(), View.OnClickListener {
                     val bundle: Bundle? = data?.extras
                     var tempMediaFileList = bundle?.getSerializable("media_list") as MutableList<File>
                     mMediaFileList.addAll(tempMediaFileList)
+                    updateMediaCount()
                 }
             }
         }
@@ -862,6 +1004,11 @@ open class MainActivity : AppCompatActivity(), View.OnClickListener {
         }
 
 
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        mVideoFileList.clear()
     }
 
     override fun onPause() {

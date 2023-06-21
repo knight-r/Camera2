@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
@@ -59,22 +60,21 @@
         >
 
         <ImageView
-            android:id="@+id/iv_photo_gallery"
+            android:id="@+id/iv_switch_camera"
             android:layout_width="@dimen/_50sdp"
             android:layout_height="@dimen/_50sdp"
-            android:src="@drawable/ic_photo_gallery"
+            android:src="@drawable/ic_switch_camera"
             android:layout_centerVertical="true"
-            android:layout_marginStart="@dimen/_60sdp"
+            android:layout_marginStart="@dimen/_50sdp"
             />
-        <ImageButton
+        <ImageView
             android:id="@+id/ib_capture_photo"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_centerHorizontal="true"
-            android:background="@drawable/round_corner"
             android:src="@drawable/ic_capture_photo" >
 
-        </ImageButton>
+        </ImageView>
         <RelativeLayout
             android:id="@+id/rl_pause_resume_stop"
             android:layout_width="wrap_content"
@@ -110,16 +110,51 @@
 
         </RelativeLayout>
 
-        <ImageView
-            android:id="@+id/iv_switch_camera"
+        <RelativeLayout
+            android:id="@+id/rl_gallery"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_alignParentRight="true"
+            android:layout_alignParentEnd="true"
             android:layout_centerVertical="true"
-            android:src="@drawable/ic_switch_camera"
-            android:background="@drawable/ic_switch_camera_background"
-            android:padding="@dimen/_8sdp"
-            android:layout_marginEnd="@dimen/_60sdp"
+            android:layout_marginEnd="@dimen/_30sdp"
+            android:padding="@dimen/_5sdp"
+            android:background="@drawable/selected_background"
+            android:visibility="gone"
+            >
+            <TextView
+                android:id="@+id/tv_media_count"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="0"
+                android:textSize="@dimen/_12sdp"
+                android:textStyle="bold"
+                android:background="@drawable/ic_media_count_background"
+                android:gravity="center"
+                android:layout_centerVertical="true"
+                />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_centerVertical="true"
+                android:layout_marginStart="@dimen/_5sdp"
+                android:layout_toEndOf="@+id/tv_media_count"
+                android:text="@string/next"
+                android:textColor="@color/black"
+                android:textSize="@dimen/_12sdp"
+                app:drawableEndCompat="@drawable/ic_save"
+                android:drawablePadding="@dimen/_5sdp"
+                app:drawableTint="@color/black" />
+
+        </RelativeLayout>
+        <ImageView
+            android:id="@+id/iv_next"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:src="@drawable/ic_faded_next_button"
+            android:layout_alignParentEnd="true"
+            android:layout_centerVertical="true"
+            android:layout_marginEnd="@dimen/_40sdp"
             />
 
     </RelativeLayout>
@@ -132,16 +167,14 @@
         android:layout_height="wrap_content"
 
         >
-        <ImageButton
-            android:id="@+id/ib_tool"
+        <ImageView
+            android:id="@+id/iv_capture_type"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:src="@drawable/ic_rectangle"
+            android:src="@drawable/ic_single_capture_mode_selected"
             android:padding="@dimen/_5sdp"
-            android:background="@drawable/round_corner"
-            android:backgroundTint="@color/tools_background_color"
             android:layout_centerVertical="true"
-            android:layout_marginStart="@dimen/_70sdp"
+            android:layout_marginStart="@dimen/_60sdp"
             />
         <RelativeLayout
             android:id="@+id/rl_zoom"
@@ -180,18 +213,114 @@
                 android:background="@drawable/tools_background"
                 />
         </RelativeLayout>
-        <ImageButton
+        <ImageView
             android:id="@+id/iv_flash"
-            android:layout_alignParentRight="true"
+            android:layout_alignParentEnd="true"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:background="@drawable/ic_flash"
+            android:background="@drawable/ic_flash_off_not_selected"
             android:layout_centerVertical="true"
-            android:layout_marginRight="@dimen/_70sdp"
+            android:layout_marginEnd="@dimen/_60sdp"
             />
 
     </RelativeLayout>
 
+    <ImageView
+        android:id="@+id/iv_setting"
+        android:src="@drawable/ic_setting"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_alignParentEnd="true"
+        android:layout_marginTop="@dimen/_30sdp"
+        android:layout_marginEnd="@dimen/_20sdp"
+        />
+
+    <RelativeLayout
+        android:id="@+id/rl_setting"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_alignParentEnd="true"
+        android:layout_marginTop="@dimen/_30sdp"
+        android:layout_marginEnd="@dimen/_20sdp"
+        android:layout_marginStart="@dimen/_90sdp"
+        android:padding="@dimen/_12sdp"
+        android:background="@drawable/setting_background"
+        android:visibility="gone"
+        >
+        <RelativeLayout
+            android:id="@+id/rl_flash_light"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            >
+
+            <TextView
+                android:id="@+id/tv_flash_light"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/flash_light_off"
+                android:textSize="@dimen/_12sdp"
+                android:textColor="#D4D5D6"
+                />
+
+            <ImageView
+                android:id="@+id/iv_flash_off"
+                android:src="@drawable/ic_flash_off_selected"
+                android:layout_toStartOf="@+id/iv_flash_on"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                />
+            <ImageView
+                android:id="@+id/iv_flash_on"
+                android:src="@drawable/ic_flash_on_not_selected"
+                android:layout_toStartOf="@+id/iv_auto_flash"
+                android:layout_marginStart="@dimen/_5sdp"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                />
+            <ImageView
+                android:id="@+id/iv_auto_flash"
+                android:src="@drawable/ic_auto_flash_not_selected"
+                android:layout_alignParentEnd="true"
+                android:layout_marginStart="@dimen/_5sdp"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                />
+        </RelativeLayout>
+        <RelativeLayout
+            android:id="@+id/rl_capture_type"
+            android:layout_below="@+id/rl_flash_light"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/_10sdp"
+            >
+            <TextView
+                android:id="@+id/tv_capture_type"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/single_capture_type"
+                android:textColor="#D4D5D6"
+                android:textSize="@dimen/_12sdp"
+                />
+        <ImageView
+            android:id="@+id/iv_single_capture_mode"
+            android:layout_toStartOf="@+id/iv_dual_capture_mode"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:src="@drawable/ic_single_capture_mode_selected"
+            />
+
+        <ImageView
+            android:id="@+id/iv_dual_capture_mode"
+            android:layout_alignParentEnd="true"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:src="@drawable/ic_dual_capture_mode_not_selected"
+            android:layout_marginStart="@dimen/_5sdp"
+            />
+        </RelativeLayout>
+
+
+    </RelativeLayout>
 
     <RelativeLayout
         android:id="@+id/rl_tools"
@@ -202,6 +331,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:background="@drawable/tools_background"
+        android:visibility="gone"
         >
         <ImageButton
             android:id="@+id/ib_vector"
