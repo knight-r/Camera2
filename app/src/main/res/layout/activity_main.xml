@@ -128,6 +128,7 @@
                 android:text="0"
                 android:textSize="@dimen/_12sdp"
                 android:textStyle="bold"
+                android:textColor="@color/white"
                 android:background="@drawable/ic_media_count_background"
                 android:gravity="center"
                 android:layout_centerVertical="true"
@@ -291,7 +292,6 @@
             android:layout_below="@+id/rl_flash_light"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="@dimen/_10sdp"
             >
             <TextView
                 android:id="@+id/tv_capture_type"
@@ -320,50 +320,6 @@
         </RelativeLayout>
 
 
-    </RelativeLayout>
-
-    <RelativeLayout
-        android:id="@+id/rl_tools"
-        android:layout_alignParentEnd="true"
-        android:layout_marginTop="@dimen/_40sdp"
-        android:layout_marginEnd="@dimen/_30sdp"
-        android:padding="@dimen/_5sdp"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:background="@drawable/tools_background"
-        android:visibility="gone"
-        >
-        <ImageButton
-            android:id="@+id/ib_vector"
-            android:background="@drawable/ic_flash_on"
-            android:layout_marginEnd="@dimen/_10sdp"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            />
-
-        <ImageButton
-            android:id="@+id/ib_cross"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginEnd="@dimen/_10sdp"
-            android:layout_toRightOf="@+id/ib_vector"
-            android:background="@drawable/ic_clock_out" />
-        <ImageButton
-            android:id="@+id/ib_rectangular_box"
-            android:layout_toRightOf="@+id/ib_cross"
-            android:background="@drawable/ic_rectangle"
-            android:layout_marginEnd="@dimen/_10sdp"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_centerVertical="true"
-            />
-        <ImageButton
-            android:id="@+id/ib_drop_down_icon"
-            android:layout_toRightOf="@+id/ib_rectangular_box"
-            android:background="@drawable/ic_drop_down"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            />
     </RelativeLayout>
 
     <Chronometer

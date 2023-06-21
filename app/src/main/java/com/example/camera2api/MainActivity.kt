@@ -232,7 +232,6 @@ open class MainActivity : AppCompatActivity(), View.OnClickListener {
                 mainBinding.ibCapturePhoto.setImageResource(R.drawable.ic_capture_video)
 
                 mainBinding.apply {
-                    rlTools.visibility = View.GONE
                     tvVideo.setBackgroundResource(R.drawable.selected_background)
                     tvVideo.setTextColor(Color.BLACK)
                     tvCamera.setBackgroundResource(R.drawable.non_selected_background)
@@ -256,7 +255,6 @@ open class MainActivity : AppCompatActivity(), View.OnClickListener {
                     ibCapturePhoto.visibility = View.VISIBLE
                     ibCapturePhoto.setImageResource(R.drawable.ic_capture_photo)
                     chronometer.visibility = View.GONE
-                    rlTools.visibility = View.VISIBLE
                     tvCamera.setBackgroundResource(R.drawable.selected_background)
                     tvCamera.setTextColor(Color.BLACK)
                     tvVideo.setBackgroundResource(R.drawable.non_selected_background)
@@ -397,7 +395,7 @@ open class MainActivity : AppCompatActivity(), View.OnClickListener {
                 mainBinding.tvFlashLight.text = str
                 mainBinding.ivFlashOn.setImageResource(R.drawable.ic_flash_on_not_selected)
                 mainBinding.ivFlashOff.setImageResource(R.drawable.ic_flash_off_selected)
-                mainBinding.ivFlash.setImageResource(R.drawable.ic_flash_off_selected)
+                mainBinding.ivFlash.setImageResource(R.drawable.ic_flash_off_not_selected)
                 mainBinding.ivAutoFlash.setImageResource(R.drawable.ic_auto_flash_not_selected)                // turn off flash
             }
 
@@ -489,8 +487,6 @@ open class MainActivity : AppCompatActivity(), View.OnClickListener {
     }
 
     private fun startGalleryActivity() {
-//      Toast.makeText(this, mMediaFileList.size.toString(), Toast.LENGTH_SHORT).show()
-
         if (mMediaFileList.size > 0) {
             val intent = Intent(this, GalleryActivity::class.java)
             val bundle = Bundle()
@@ -502,7 +498,6 @@ open class MainActivity : AppCompatActivity(), View.OnClickListener {
         }
 
     }
-
 
     /**
      * setup camera to take picture
