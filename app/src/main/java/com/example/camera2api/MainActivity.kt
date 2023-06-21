@@ -85,14 +85,12 @@ open class MainActivity : AppCompatActivity(), View.OnClickListener {
     private var mWidth: Int =0
     private var mHeight: Int =0
     private var mIsVideoCaptureOn: Boolean = false
-    private var mIsFlashOn: Boolean = false
     private var mIsVideoPaused: Boolean = false
     private lateinit var mCameraManager : CameraManager
     private lateinit var mSurface: Surface
     private lateinit var mMediaFileList: MutableList<File>
     private var REQUEST_CODE_GALLERY: Int = 1001
     private lateinit var mCameraCharacteristics: CameraCharacteristics
-    private lateinit var mediaCountTV: TextView
     private val displayManager: DisplayManager by lazy {
         applicationContext.getSystemService(DISPLAY_SERVICE) as DisplayManager
     }
@@ -184,7 +182,6 @@ open class MainActivity : AppCompatActivity(), View.OnClickListener {
         mCameraId = ID_CAMERA_BACK
         mTextureView!!.surfaceTextureListener = textureListener
         mCameraManager = getSystemService(Context.CAMERA_SERVICE) as CameraManager
-        mediaCountTV = mainBinding.tvMediaCount
         ORIENTATIONS.append(Surface.ROTATION_0, 90)
         ORIENTATIONS.append(Surface.ROTATION_90, 0)
         ORIENTATIONS.append(Surface.ROTATION_180, 270)
@@ -209,7 +206,6 @@ open class MainActivity : AppCompatActivity(), View.OnClickListener {
         mainBinding.ibStop.setOnClickListener(this)
         mainBinding.rlGallery.setOnClickListener(this)
         mainBinding.ivSwitchCamera.setOnClickListener(this)
-
         mainBinding.ivFlashOn.setOnClickListener(this)
         mainBinding.ivFlashOff.setOnClickListener(this)
         mainBinding.ivAutoFlash.setOnClickListener(this)
@@ -249,7 +245,6 @@ open class MainActivity : AppCompatActivity(), View.OnClickListener {
                 mIsRecordingVideo = false
                 mainBinding.apply {
                     ibPauseResume.setImageResource(R.drawable.ic_pause)
-                 //   ivPhotoGallery.setImageResource(R.drawable.ic_photo_gallery)
                     rlPauseResumeStop.visibility = View.GONE
                     tvPause.visibility = View.GONE
                     ibCapturePhoto.visibility = View.VISIBLE
@@ -317,9 +312,7 @@ open class MainActivity : AppCompatActivity(), View.OnClickListener {
                     rlPauseResumeStop.visibility = View.GONE
                     ibCapturePhoto.visibility = View.VISIBLE
                     chronometer.visibility = View.GONE
-               //     ivPhotoGallery.setImageResource(R.drawable.ic_photo_gallery)
                     tvPause.visibility = View.GONE
-                   // ivPhotoGallery.setImageResource(R.drawable.ic_photo_gallery)
                 }
                 mIsRecordingVideo = false
                 stopRecordingVideo()
@@ -709,6 +702,7 @@ open class MainActivity : AppCompatActivity(), View.OnClickListener {
                 mergeVideosUsingTranscoder(mVideoFileList,outputFile)
             } else {
                 mMediaFileList.add(videoFile)
+                updateMediaCount()
             }
 
         }
@@ -740,7 +734,6 @@ open class MainActivity : AppCompatActivity(), View.OnClickListener {
             Log.e(TAG, "Failed to set up MediaRecorder: ${e.message}")
         }
     }
-
 
     private fun takePicture() {
         try {
